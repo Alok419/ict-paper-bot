@@ -133,6 +133,7 @@ class LiveICTPaperBot:
         self.daily_stats = {}
         self.completed_trades = []
         self.fvg_pool = []
+        self.mitigated_fvg_ids = set()
         self.last_candle_time = 0
         self.session_notified = False
         self.daily_summary_sent = False
@@ -205,7 +206,8 @@ class LiveICTPaperBot:
                     self.active_trade = st.get("active_trade", None)
                     self.daily_stats = st.get("daily_stats", {})
                     self.completed_trades = st.get("completed_trades", [])
-                    print(f"[State Loaded] Capital: ${self.capital:,.2f} | Active Trade: {'YES' if self.active_trade else 'None'}")
+                    self.mitigated_fvg_ids = set(st.get("mitigated_fvg_ids", []))
+                    print(f"[State Loaded] Capital: ${self.capital:,.2f} | Active Trade: {'YES' if self.active_trade else 'None'} | Mitigated FVGs: {len(self.mitigated_fvg_ids)}")
             except Exception as e:
                 print(f"Error loading state: {e}")
 
@@ -215,6 +217,7 @@ class LiveICTPaperBot:
             "active_trade": self.active_trade,
             "daily_stats": self.daily_stats,
             "completed_trades": self.completed_trades,
+            "mitigated_fvg_ids": list(self.mitigated_fvg_ids),
             "updated_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
         with open(STATE_FILE, mode="w", encoding="utf-8") as f:
@@ -397,159 +400,169 @@ class LiveICTPaperBot:
         closed = candles[:-1]
         active_pool = []
         for i in range(2, len(closed)):
-            c = closed[i]
-            c_mid = closed[i-1]
-            c_prev2 = closed[i-2]
+            c3 = closed[i]
+            c2 = closed[i-1]
+            c1 = closed[i-2]
             
-            # Bullish FVG: c Low > c_prev2 High
-            if c["low"] > c_prev2["high"]:
+            # Bullish FVG: c3 Low > c1 High
+            if c3["low"] > c1["high"]:
+                fvg_id = f"BULL_{c2['time']}"
                 active_pool.append({
-                    "top": c["low"],
-                    "bottom": c_prev2["high"],
+                    "id": fvg_id,
+                    "top": c3["low"],
+                    "bottom": c1["high"],
                     "type": "BULLISH",
-                    "time": c_mid["time"],
-                    "active": True,
+                    "time": c2["time"],
+                    "active": fvg_id not in self.mitigated_fvg_ids,
                     "inverted": False
                 })
-            # Bearish FVG: c High < c_prev2 Low
-            elif c["high"] < c_prev2["low"]:
+            # Bearish FVG: c3 High < c1 Low
+            elif c3["high"] < c1["low"]:
+                fvg_id = f"BEAR_{c2['time']}"
                 active_pool.append({
-                    "top": c_prev2["low"],
-                    "bottom": c["high"],
+                    "id": fvg_id,
+                    "top": c1["low"],
+                    "bottom": c3["high"],
                     "type": "BEARISH",
-                    "time": c_mid["time"],
-                    "active": True,
+                    "time": c2["time"],
+                    "active": fvg_id not in self.mitigated_fvg_ids,
                     "inverted": False
                 })
                 
         # Track Inversions across subsequent candles
         for f in active_pool:
-            for c in closed:
-                if c["time"] > f["time"]:
+            for ck in closed:
+                if ck["time"] > f["time"]:
                     if not f["inverted"]:
-                        if f["type"] == "BEARISH" and c["close"] > f["top"]:
+                        if f["type"] == "BEARISH" and ck["close"] > f["top"]:
                             f["inverted"] = True
                             f["type"] = "BULLISH_iFVG"
-                        elif f["type"] == "BULLISH" and c["close"] < f["bottom"]:
+                        elif f["type"] == "BULLISH" and ck["close"] < f["bottom"]:
                             f["inverted"] = True
                             f["type"] = "BEARISH_iFVG"
                             
         self.fvg_pool = active_pool
                     
-        # Check retest for entry
-        for f in self.fvg_pool[-10:]:
-            if f["active"]:
-                # Bullish setup
-                if f["type"] in ["BULLISH_iFVG", "BULLISH"]:
-                    if current_price <= f["top"] and current_price >= f["bottom"]:
-                        entry_price = current_price
-                        sl_price = f["bottom"] - 5.0
-                        risk_dist = entry_price - sl_price
+        # Check retest for entry on any active FVG
+        for f in self.fvg_pool:
+            if not f["active"]:
+                continue
+                
+            # Bullish setup
+            if f["type"] in ["BULLISH_iFVG", "BULLISH"]:
+                # Current price or forming candle wicks into FVG zone
+                if (current_price <= f["top"] and current_price >= f["bottom"]) or (candles[-1]["low"] <= f["top"] and current_price >= f["bottom"]):
+                    entry_price = current_price
+                    sl_price = f["bottom"] - 5.0
+                    risk_dist = entry_price - sl_price
+                    
+                    if risk_dist > 10.0 and (risk_dist / entry_price) < 0.02:
+                        tp1_price = entry_price + (self.partial_tp_rr * risk_dist)
+                        tp2_price = entry_price + (self.min_rr * risk_dist)
                         
-                        if risk_dist > 20.0 and (risk_dist / entry_price) < 0.02:
-                            tp1_price = entry_price + (self.partial_tp_rr * risk_dist)
-                            tp2_price = entry_price + (self.min_rr * risk_dist)
-                            
-                            risk_usd = self.capital * self.risk_per_trade
-                            notional_usd = min(risk_usd / (risk_dist / entry_price), self.capital * self.max_leverage)
-                            btc_size = notional_usd / entry_price
-                            
-                            self.active_trade = {
-                                "id": len(self.completed_trades) + 1,
-                                "date_str": today_str,
-                                "side": "BUY",
-                                "model": f["type"],
-                                "entry_time": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
-                                "entry": entry_price,
-                                "sl": sl_price,
-                                "tp1": tp1_price,
-                                "tp2": tp2_price,
-                                "risk_dist": risk_dist,
-                                "size": btc_size,
-                                "notional": notional_usd,
-                                "leverage": notional_usd / self.capital,
-                                "starting_balance": self.capital,
-                                "risk_usd": risk_usd,
-                                "tp1_hit": False,
-                                "be_activated": False,
-                                "realized_pnl": 0.0
-                            }
-                            day_tracker["trades"] += 1
-                            f["active"] = False
-                            self.save_state()
-                            
-                            entry_alert = (
-                                f"🚀 <b>ICT BOT: NEW LIVE TRADE ENTERED</b>\n"
-                                f"━━━━━━━━━━━━━━━━━━━\n"
-                                f"• <b>Trade #{self.active_trade['id']}</b> | <b>Side:</b> LONG 🟢\n"
-                                f"• <b>Setup Model:</b> {f['type']}\n"
-                                f"• <b>Entry Price:</b> ${entry_price:,.1f}\n"
-                                f"• <b>Stop Loss:</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
-                                f"• <b>Take Profit 1 (1.5R):</b> ${tp1_price:,.1f} (50% exit + BE)\n"
-                                f"• <b>Take Profit 2 (2.5R):</b> ${tp2_price:,.1f}\n"
-                                f"• <b>Position Size:</b> {btc_size:.6f} BTC (${notional_usd:.2f})\n"
-                                f"• <b>Risk:</b> ${risk_usd:.2f} (4.0%)\n"
-                                f"• <b>Account Balance:</b> ${self.capital:,.2f}"
-                            )
-                            send_telegram_alert(entry_alert)
-                            print(f"\n[LIVE TRADE ENTERED] LONG #{self.active_trade['id']} at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
-                            break
+                        risk_usd = self.capital * self.risk_per_trade
+                        notional_usd = min(risk_usd / (risk_dist / entry_price), self.capital * self.max_leverage)
+                        btc_size = notional_usd / entry_price
+                        
+                        self.active_trade = {
+                            "id": len(self.completed_trades) + 1,
+                            "date_str": today_str,
+                            "side": "BUY",
+                            "model": f["type"],
+                            "entry_time": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
+                            "entry": entry_price,
+                            "sl": sl_price,
+                            "tp1": tp1_price,
+                            "tp2": tp2_price,
+                            "risk_dist": risk_dist,
+                            "size": btc_size,
+                            "notional": notional_usd,
+                            "leverage": notional_usd / self.capital,
+                            "starting_balance": self.capital,
+                            "risk_usd": risk_usd,
+                            "tp1_hit": False,
+                            "be_activated": False,
+                            "realized_pnl": 0.0
+                        }
+                        day_tracker["trades"] += 1
+                        f["active"] = False
+                        self.mitigated_fvg_ids.add(f["id"])
+                        self.save_state()
+                        
+                        entry_alert = (
+                            f"🚀 <b>ICT BOT: NEW LIVE TRADE ENTERED</b>\n"
+                            f"━━━━━━━━━━━━━━━━━━━\n"
+                            f"• <b>Trade #{self.active_trade['id']}</b> | <b>Side:</b> LONG 🟢\n"
+                            f"• <b>Setup Model:</b> {f['type']}\n"
+                            f"• <b>Entry Price:</b> ${entry_price:,.1f}\n"
+                            f"• <b>Stop Loss:</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
+                            f"• <b>Take Profit 1 (1.5R):</b> ${tp1_price:,.1f} (50% exit + BE)\n"
+                            f"• <b>Take Profit 2 (2.5R):</b> ${tp2_price:,.1f}\n"
+                            f"• <b>Position Size:</b> {btc_size:.6f} BTC (${notional_usd:.2f})\n"
+                            f"• <b>Risk:</b> ${risk_usd:.2f} (4.0%)\n"
+                            f"• <b>Account Balance:</b> ${self.capital:,.2f}"
+                        )
+                        send_telegram_alert(entry_alert)
+                        print(f"\n[LIVE TRADE ENTERED] LONG #{self.active_trade['id']} at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
+                        break
 
-                # Bearish setup
-                elif f["type"] in ["BEARISH_iFVG", "BEARISH"]:
-                    if current_price >= f["bottom"] and current_price <= f["top"]:
-                        entry_price = current_price
-                        sl_price = f["top"] + 5.0
-                        risk_dist = sl_price - entry_price
+            # Bearish setup
+            elif f["type"] in ["BEARISH_iFVG", "BEARISH"]:
+                # Current price or forming candle wicks into FVG zone
+                if (current_price >= f["bottom"] and current_price <= f["top"]) or (candles[-1]["high"] >= f["bottom"] and current_price <= f["top"]):
+                    entry_price = current_price
+                    sl_price = f["top"] + 5.0
+                    risk_dist = sl_price - entry_price
+                    
+                    if risk_dist > 10.0 and (risk_dist / entry_price) < 0.02:
+                        tp1_price = entry_price - (self.partial_tp_rr * risk_dist)
+                        tp2_price = entry_price - (self.min_rr * risk_dist)
                         
-                        if risk_dist > 20.0 and (risk_dist / entry_price) < 0.02:
-                            tp1_price = entry_price - (self.partial_tp_rr * risk_dist)
-                            tp2_price = entry_price - (self.min_rr * risk_dist)
-                            
-                            risk_usd = self.capital * self.risk_per_trade
-                            notional_usd = min(risk_usd / (risk_dist / entry_price), self.capital * self.max_leverage)
-                            btc_size = notional_usd / entry_price
-                            
-                            self.active_trade = {
-                                "id": len(self.completed_trades) + 1,
-                                "date_str": today_str,
-                                "side": "SELL",
-                                "model": f["type"],
-                                "entry_time": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
-                                "entry": entry_price,
-                                "sl": sl_price,
-                                "tp1": tp1_price,
-                                "tp2": tp2_price,
-                                "risk_dist": risk_dist,
-                                "size": btc_size,
-                                "notional": notional_usd,
-                                "leverage": notional_usd / self.capital,
-                                "starting_balance": self.capital,
-                                "risk_usd": risk_usd,
-                                "tp1_hit": False,
-                                "be_activated": False,
-                                "realized_pnl": 0.0
-                            }
-                            day_tracker["trades"] += 1
-                            f["active"] = False
-                            self.save_state()
-                            
-                            entry_alert = (
-                                f"🚀 <b>ICT BOT: NEW LIVE TRADE ENTERED</b>\n"
-                                f"━━━━━━━━━━━━━━━━━━━\n"
-                                f"• <b>Trade #{self.active_trade['id']}</b> | <b>Side:</b> SHORT 🔴\n"
-                                f"• <b>Setup Model:</b> {f['type']}\n"
-                                f"• <b>Entry Price:</b> ${entry_price:,.1f}\n"
-                                f"• <b>Stop Loss:</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
-                                f"• <b>Take Profit 1 (1.5R):</b> ${tp1_price:,.1f} (50% exit + BE)\n"
-                                f"• <b>Take Profit 2 (2.5R):</b> ${tp2_price:,.1f}\n"
-                                f"• <b>Position Size:</b> {btc_size:.6f} BTC (${notional_usd:.2f})\n"
-                                f"• <b>Risk:</b> ${risk_usd:.2f} (4.0%)\n"
-                                f"• <b>Account Balance:</b> ${self.capital:,.2f}"
-                            )
-                            send_telegram_alert(entry_alert)
-                            print(f"\n[LIVE TRADE ENTERED] SHORT #{self.active_trade['id']} at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
-                            break
+                        risk_usd = self.capital * self.risk_per_trade
+                        notional_usd = min(risk_usd / (risk_dist / entry_price), self.capital * self.max_leverage)
+                        btc_size = notional_usd / entry_price
+                        
+                        self.active_trade = {
+                            "id": len(self.completed_trades) + 1,
+                            "date_str": today_str,
+                            "side": "SELL",
+                            "model": f["type"],
+                            "entry_time": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
+                            "entry": entry_price,
+                            "sl": sl_price,
+                            "tp1": tp1_price,
+                            "tp2": tp2_price,
+                            "risk_dist": risk_dist,
+                            "size": btc_size,
+                            "notional": notional_usd,
+                            "leverage": notional_usd / self.capital,
+                            "starting_balance": self.capital,
+                            "risk_usd": risk_usd,
+                            "tp1_hit": False,
+                            "be_activated": False,
+                            "realized_pnl": 0.0
+                        }
+                        day_tracker["trades"] += 1
+                        f["active"] = False
+                        self.mitigated_fvg_ids.add(f["id"])
+                        self.save_state()
+                        
+                        entry_alert = (
+                            f"🚀 <b>ICT BOT: NEW LIVE TRADE ENTERED</b>\n"
+                            f"━━━━━━━━━━━━━━━━━━━\n"
+                            f"• <b>Trade #{self.active_trade['id']}</b> | <b>Side:</b> SHORT 🔴\n"
+                            f"• <b>Setup Model:</b> {f['type']}\n"
+                            f"• <b>Entry Price:</b> ${entry_price:,.1f}\n"
+                            f"• <b>Stop Loss:</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
+                            f"• <b>Take Profit 1 (1.5R):</b> ${tp1_price:,.1f} (50% exit + BE)\n"
+                            f"• <b>Take Profit 2 (2.5R):</b> ${tp2_price:,.1f}\n"
+                            f"• <b>Position Size:</b> {btc_size:.6f} BTC (${notional_usd:.2f})\n"
+                            f"• <b>Risk:</b> ${risk_usd:.2f} (4.0%)\n"
+                            f"• <b>Account Balance:</b> ${self.capital:,.2f}"
+                        )
+                        send_telegram_alert(entry_alert)
+                        print(f"\n[LIVE TRADE ENTERED] SHORT #{self.active_trade['id']} at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
+                        break
 
 # -----------------------------------------------------------------------------
 # 4. MAIN LOOP
