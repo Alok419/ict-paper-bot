@@ -388,45 +388,53 @@ class LiveICTPaperBot:
         if self.active_trade is not None:
             return
 
-        # Fetch recent 15m candles
-        candles = fetch_live_candles("BTCUSD", "15m", 30)
+        # Fetch recent 15m candles (past 40 candles)
+        candles = fetch_live_candles("BTCUSD", "15m", 40)
         if len(candles) < 20:
             return
             
-        # Check if latest candle closed
-        latest_c = candles[-1]
-        prev_c = candles[-2]
-        prev_c2 = candles[-3]
-        
-        # Track FVGs
-        if prev_c["low"] > prev_c2["high"]:
-            self.fvg_pool.append({
-                "top": prev_c["low"],
-                "bottom": prev_c2["high"],
-                "type": "BULLISH",
-                "time": prev_c["time"],
-                "active": True,
-                "inverted": False
-            })
-        elif prev_c["high"] < prev_c2["low"]:
-            self.fvg_pool.append({
-                "top": prev_c2["low"],
-                "bottom": prev_c["high"],
-                "type": "BEARISH",
-                "time": prev_c["time"],
-                "active": True,
-                "inverted": False
-            })
+        # 1. Build & track active FVGs across all recent closed candles
+        closed = candles[:-1]
+        active_pool = []
+        for i in range(2, len(closed)):
+            c = closed[i]
+            c_mid = closed[i-1]
+            c_prev2 = closed[i-2]
             
-        # Check Inversions
-        for f in self.fvg_pool:
-            if f["active"] and not f["inverted"]:
-                if f["type"] == "BEARISH" and current_price > f["top"]:
-                    f["inverted"] = True
-                    f["type"] = "BULLISH_iFVG"
-                elif f["type"] == "BULLISH" and current_price < f["bottom"]:
-                    f["inverted"] = True
-                    f["type"] = "BEARISH_iFVG"
+            # Bullish FVG: c Low > c_prev2 High
+            if c["low"] > c_prev2["high"]:
+                active_pool.append({
+                    "top": c["low"],
+                    "bottom": c_prev2["high"],
+                    "type": "BULLISH",
+                    "time": c_mid["time"],
+                    "active": True,
+                    "inverted": False
+                })
+            # Bearish FVG: c High < c_prev2 Low
+            elif c["high"] < c_prev2["low"]:
+                active_pool.append({
+                    "top": c_prev2["low"],
+                    "bottom": c["high"],
+                    "type": "BEARISH",
+                    "time": c_mid["time"],
+                    "active": True,
+                    "inverted": False
+                })
+                
+        # Track Inversions across subsequent candles
+        for f in active_pool:
+            for c in closed:
+                if c["time"] > f["time"]:
+                    if not f["inverted"]:
+                        if f["type"] == "BEARISH" and c["close"] > f["top"]:
+                            f["inverted"] = True
+                            f["type"] = "BULLISH_iFVG"
+                        elif f["type"] == "BULLISH" and c["close"] < f["bottom"]:
+                            f["inverted"] = True
+                            f["type"] = "BEARISH_iFVG"
+                            
+        self.fvg_pool = active_pool
                     
         # Check retest for entry
         for f in self.fvg_pool[-10:]:
