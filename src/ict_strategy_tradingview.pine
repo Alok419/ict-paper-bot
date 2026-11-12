@@ -1,0 +1,174 @@
+//@version=5
+strategy("ICT 15m/1H Master Strategy [Delta Exchange BTCUSD]", overlay=true, initial_capital=100, default_qty_type=strategy.percent_of_equity, default_qty_value=4, currency=currency.USD, max_boxes_count=500, max_lines_count=500)
+
+// =========================================================================
+// 1. INPUT PARAMETERS (USER CUSTOMIZATIONS)
+// =========================================================================
+grp_session = "1. Session & Timing Filter"
+session_time = input.session("1100-1730:1234567", "Trading Window (UTC) [4:30 PM - 11:00 PM IST]", group=grp_session)
+session_tz   = input.string("UTC", "Session Timezone", group=grp_session)
+
+grp_risk = "2. Risk Management & Rules"
+risk_per_trade   = input.float(4.0, "Risk Per Trade (%)", minval=0.5, maxval=10.0, step=0.5, group=grp_risk)
+daily_loss_limit = input.float(8.0, "Daily Loss Limit (%)", minval=1.0, maxval=20.0, step=1.0, group=grp_risk)
+max_trades_daily = input.int(3, "Max Trades Per Day", minval=1, maxval=10, group=grp_risk)
+min_rr           = input.float(2.5, "Target Risk-to-Reward (TP2)", minval=1.5, maxval=10.0, step=0.1, group=grp_risk)
+partial_tp_rr    = input.float(1.5, "Partial Take Profit R:R (TP1)", minval=1.0, maxval=5.0, step=0.1, group=grp_risk)
+partial_tp_pct   = input.float(50.0, "Partial TP Size (%)", minval=10.0, maxval=90.0, step=5.0, group=grp_risk)
+
+grp_display = "3. Visual Styling"
+color_bull_fvg  = input.color(color.new(color.teal, 80), "Bullish FVG Color", group=grp_display)
+color_bear_fvg  = input.color(color.new(color.red, 80), "Bearish FVG Color", group=grp_display)
+color_ifvg      = input.color(color.new(color.purple, 75), "Inversion FVG (iFVG) Color", group=grp_display)
+
+// =========================================================================
+// 2. SESSION & DAILY LOSS CIRCUIT BREAKER
+// =========================================================================
+in_session = not na(time(timeframe.period, session_time, session_tz))
+
+// Daily trade & loss counter
+var int   daily_trades_count = 0
+var float day_start_equity   = 100.0
+var bool  circuit_breaker    = false
+
+is_new_day = ta.change(time("D"))
+if is_new_day
+    daily_trades_count := 0
+    day_start_equity   := strategy.equity
+    circuit_breaker    := false
+
+current_daily_pnl_pct = ((strategy.equity - day_start_equity) / day_start_equity) * 100.0
+if current_daily_pnl_pct <= -daily_loss_limit
+    circuit_breaker := true
+
+can_trade = in_session and not circuit_breaker and (daily_trades_count < max_trades_daily) and (strategy.position_size == 0)
+
+// Highlight active session background
+bgcolor(in_session ? color.new(color.blue, 96) : na, title="Trading Session (4:30 PM - 11 PM IST)")
+
+// =========================================================================
+// 3. FVG & INVERSION FVG DETECTION
+// =========================================================================
+is_bull_fvg = low > high[2]
+is_bear_fvg = high < low[2]
+
+var float[] bull_fvg_top = array.new_float(0)
+var float[] bull_fvg_bot = array.new_float(0)
+var float[] bear_fvg_top = array.new_float(0)
+var float[] bear_fvg_bot = array.new_float(0)
+
+// Track Bullish FVG
+if is_bull_fvg
+    array.push(bull_fvg_top, low)
+    array.push(bull_fvg_bot, high[2])
+    box.new(left=bar_index-2, top=low, right=bar_index+8, bottom=high[2], border_color=color.teal, bgcolor=color_bull_fvg)
+
+// Track Bearish FVG
+if is_bear_fvg
+    array.push(bear_fvg_top, low[2])
+    array.push(bear_fvg_bot, high)
+    box.new(left=bar_index-2, top=low[2], right=bar_index+8, bottom=high, border_color=color.red, bgcolor=color_bear_fvg)
+
+// =========================================================================
+// 4. MARKET STRUCTURE SHIFT (MSS) & INVERSION TRIGGER
+// =========================================================================
+swing_high = ta.highest(high, 16)[1]
+swing_low  = ta.lowest(low, 16)[1]
+
+bullish_mss = ta.crossover(close, swing_high)
+bearish_mss = ta.crossunder(close, swing_low)
+
+// Detect Inversion FVGs:
+// If price closed above a Bearish FVG, it flips to Bullish iFVG (Support)
+var float ifvg_bull_top = na
+var float ifvg_bull_bot = na
+var float ifvg_bear_top = na
+var float ifvg_bear_bot = na
+
+if array.size(bear_fvg_top) > 0
+    for i = 0 to array.size(bear_fvg_top) - 1
+        b_top = array.get(bear_fvg_top, i)
+        b_bot = array.get(bear_fvg_bot, i)
+        if close > b_top // Closed above Bearish FVG -> INVERTED!
+            ifvg_bull_top := b_top
+            ifvg_bull_bot := b_bot
+            box.new(left=bar_index, top=b_top, right=bar_index+12, bottom=b_bot, border_color=color.purple, bgcolor=color_ifvg)
+            break
+
+if array.size(bull_fvg_top) > 0
+    for i = 0 to array.size(bull_fvg_top) - 1
+        b_top = array.get(bull_fvg_top, i)
+        b_bot = array.get(bull_fvg_bot, i)
+        if close < b_bot // Closed below Bullish FVG -> INVERTED!
+            ifvg_bear_top := b_top
+            ifvg_bear_bot := b_bot
+            box.new(left=bar_index, top=b_top, right=bar_index+12, bottom=b_bot, border_color=color.orange, bgcolor=color_ifvg)
+            break
+
+// =========================================================================
+// 5. TRADE EXECUTION & ORDERS
+// =========================================================================
+// Long Condition: Retest of Bullish iFVG or Bullish FVG with MSS
+long_condition = can_trade and not na(ifvg_bull_top) and (low <= ifvg_bull_top) and (close >= ifvg_bull_bot) and (close > open)
+
+// Short Condition: Retest of Bearish iFVG or Bearish FVG with MSS
+short_condition = can_trade and not na(ifvg_bear_bot) and (high >= ifvg_bear_bot) and (close <= ifvg_bear_top) and (close < open)
+
+// Position Sizing: Risk exactly 4% ($4)
+var float long_entry = na
+var float long_sl    = na
+var float long_tp1   = na
+var float long_tp2   = na
+
+var float short_entry = na
+var float short_sl    = na
+var float short_tp1   = na
+var float short_tp2   = na
+
+if long_condition
+    long_entry := ifvg_bull_top
+    long_sl    := ifvg_bull_bot - 5.0
+    risk_dist  = long_entry - long_sl
+    if risk_dist > 20.0
+        long_tp1 := long_entry + (partial_tp_rr * risk_dist)
+        long_tp2 := long_entry + (min_rr * risk_dist)
+        strategy.entry("Long", strategy.long)
+        daily_trades_count += 1
+        ifvg_bull_top := na // reset zone
+
+if short_condition
+    short_entry := ifvg_bear_bot
+    short_sl    := ifvg_bear_top + 5.0
+    risk_dist   = short_sl - short_entry
+    if risk_dist > 20.0
+        short_tp1 := short_entry - (partial_tp_rr * risk_dist)
+        short_tp2 := short_entry - (min_rr * risk_dist)
+        strategy.entry("Short", strategy.short)
+        daily_trades_count += 1
+        ifvg_bear_bot := na // reset zone
+
+// Manage Long Exits (Partial TP1 + Breakeven + TP2)
+if strategy.position_size > 0
+    // If TP1 hit, secure partial and move stop to breakeven
+    if high >= long_tp1
+        strategy.exit("TP1_Long", from_entry="Long", qty_percent=partial_tp_pct, limit=long_tp1)
+        strategy.exit("TP2_Long", from_entry="Long", stop=long_entry, limit=long_tp2)
+    else
+        strategy.exit("Exit_Long", from_entry="Long", stop=long_sl, limit=long_tp2)
+
+// Manage Short Exits (Partial TP1 + Breakeven + TP2)
+if strategy.position_size < 0
+    if low <= short_tp1
+        strategy.exit("TP1_Short", from_entry="Short", qty_percent=partial_tp_pct, limit=short_tp1)
+        strategy.exit("TP2_Short", from_entry="Short", stop=short_entry, limit=short_tp2)
+    else
+        strategy.exit("Exit_Short", from_entry="Short", stop=short_sl, limit=short_tp2)
+
+// Plot Entry / SL / TP markers
+plot(strategy.position_size > 0 ? long_sl : na, "Long SL", color=color.red, style=plot.style_linebr, linewidth=2)
+plot(strategy.position_size > 0 ? long_tp1 : na, "Long TP1 (1:1.5)", color=color.yellow, style=plot.style_linebr, linewidth=1)
+plot(strategy.position_size > 0 ? long_tp2 : na, "Long TP2 (1:2.5)", color=color.green, style=plot.style_linebr, linewidth=2)
+
+plot(strategy.position_size < 0 ? short_sl : na, "Short SL", color=color.red, style=plot.style_linebr, linewidth=2)
+plot(strategy.position_size < 0 ? short_tp1 : na, "Short TP1 (1:1.5)", color=color.yellow, style=plot.style_linebr, linewidth=1)
+plot(strategy.position_size < 0 ? short_tp2 : na, "Short TP2 (1:2.5)", color=color.green, style=plot.style_linebr, linewidth=2)

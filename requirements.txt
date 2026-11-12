@@ -1,0 +1,4 @@
+# Python Standard Library only is used by ict_paper_bot.py!
+# Optional packages for backtesting / plotting:
+matplotlib>=3.8.0
+pillow>=10.0.0
