@@ -184,7 +184,7 @@ class LiveICTPaperBot:
         total_growth = ((self.capital - self.initial_capital) / self.initial_capital) * 100.0
         
         msg = (
-            f"🌙 <b>ICT BOT: DAILY SESSION SUMMARY (11:00 PM IST)</b>\n"
+            f"🌙 <b>ICT BOT: DAILY SESSION SUMMARY (11:55 PM IST)</b>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"• <b>Date:</b> {today_str}\n"
             f"• <b>Today's Trades:</b> {day_stats['trades']} taken ({wins} Wins / {losses} Losses)\n"
@@ -226,8 +226,8 @@ class LiveICTPaperBot:
             now_ist = datetime.datetime.now(ist)
         h = now_ist.hour
         m = now_ist.minute
-        # 4:30 PM (16:30) to 11:00 PM (23:00) IST
-        return ((h == 16 and m >= 30) or (17 <= h < 23))
+        # 4:30 PM (16:30) to 11:55 PM (23:55) IST
+        return ((h == 16 and m >= 30) or (17 <= h < 23) or (h == 23 and m < 55))
 
     def process_tick(self):
         ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
@@ -375,7 +375,7 @@ class LiveICTPaperBot:
         # ---------------------------------------------------------------------
         # 2. CHECK CANDLE FORMATION & SCAN FOR NEW SETUPS
         # ---------------------------------------------------------------------
-        # Only scan for entries during 4:30 PM - 11:00 PM IST
+        # Only scan for entries during 4:30 PM - 11:55 PM IST
         if not self.is_in_session(now_ist):
             return
             
@@ -554,7 +554,7 @@ def run_live_loop():
     print("      ICT LIVE PAPER TRADING BOT - DELTA EXCHANGE INDIA")
     print("="*65)
     print(f"Current Capital:             ${bot.capital:,.2f}")
-    print(f"Trading Session:             4:30 PM to 11:00 PM IST (Daily)")
+    print(f"Trading Session:             4:30 PM to 11:55 PM IST (Daily)")
     print(f"Risk Per Trade:              4.0% (${bot.capital * 0.04:,.2f})")
     print(f"Daily Loss Limit:            8.0% (${bot.capital * 0.08:,.2f})")
     print(f"Max Trades Per Day:          3 Trades")
@@ -580,8 +580,8 @@ def run_live_loop():
                 except Exception as e:
                     print(f"Error sending hourly heartbeat: {e}", flush=True)
 
-            # Daily Summary at 11:00 PM IST (23:00)
-            if now_ist.hour == 23 and not bot.daily_summary_sent:
+            # Daily Summary at 11:55 PM IST (23:55)
+            if now_ist.hour == 23 and now_ist.minute >= 55 and not bot.daily_summary_sent:
                 try:
                     bot.send_daily_summary(now_ist)
                     bot.daily_summary_sent = True
@@ -599,7 +599,7 @@ def run_live_loop():
                     "• <b>Symbol:</b> BTCUSD (Delta Exchange India)\n"
                     "• <b>Status:</b> Scanning live 15m candles for ICT setups.\n"
                     "• <b>Capital:</b> ${:,.2f}\n"
-                    "• <b>Active Hours:</b> 4:30 PM - 11:00 PM IST".format(bot.capital)
+                    "• <b>Active Hours:</b> 4:30 PM - 11:55 PM IST".format(bot.capital)
                 )
                 send_telegram_alert(open_msg)
             elif not is_active:
