@@ -404,7 +404,11 @@ class LiveICTPaperBot:
             c2 = closed[i-1]
             c1 = closed[i-2]
             
-            # Bullish FVG: c3 Low > c1 High
+            # Displacement MSS Check on Candle 2 (Slide 4 'Strong Move / Displacement')
+            did_mss_bullish = (c2["close"] > c1["high"] and c2["close"] > c2["open"])
+            did_mss_bearish = (c2["close"] < c1["low"] and c2["close"] < c2["open"])
+
+            # Model 1 Bullish FVG: c3 Low > c1 High
             if c3["low"] > c1["high"]:
                 fvg_id = f"BULL_{c2['time']}"
                 active_pool.append({
@@ -413,10 +417,11 @@ class LiveICTPaperBot:
                     "bottom": c1["high"],
                     "type": "BULLISH",
                     "time": c2["time"],
+                    "has_mss": did_mss_bullish,
                     "active": fvg_id not in self.mitigated_fvg_ids,
                     "inverted": False
                 })
-            # Bearish FVG: c3 High < c1 Low
+            # Model 1 Bearish FVG: c3 High < c1 Low
             elif c3["high"] < c1["low"]:
                 fvg_id = f"BEAR_{c2['time']}"
                 active_pool.append({
@@ -425,11 +430,12 @@ class LiveICTPaperBot:
                     "bottom": c3["high"],
                     "type": "BEARISH",
                     "time": c2["time"],
+                    "has_mss": did_mss_bearish,
                     "active": fvg_id not in self.mitigated_fvg_ids,
                     "inverted": False
                 })
                 
-        # Track Inversions across subsequent candles
+        # Track Inversions across subsequent candles (Model 2: iFVG - Slide 5 'Structure Shifts')
         for f in active_pool:
             for ck in closed:
                 if ck["time"] > f["time"]:
@@ -437,26 +443,35 @@ class LiveICTPaperBot:
                         if f["type"] == "BEARISH" and ck["close"] > f["top"]:
                             f["inverted"] = True
                             f["type"] = "BULLISH_iFVG"
+                            f["has_mss"] = True # An inversion is a confirmed market structure shift
                         elif f["type"] == "BULLISH" and ck["close"] < f["bottom"]:
                             f["inverted"] = True
                             f["type"] = "BEARISH_iFVG"
+                            f["has_mss"] = True # An inversion is a confirmed market structure shift
                             
         self.fvg_pool = active_pool
                     
-        # Check retest for entry on any active FVG
+        # Retest Reversal Confirmation Check on the most recently closed candle
+        c_last = closed[-1]
+        c_last_prev = closed[-2]
+        retest_bull_mss = (c_last["close"] > c_last_prev["high"] and c_last["close"] > c_last["open"])
+        retest_bear_mss = (c_last["close"] < c_last_prev["low"] and c_last["close"] < c_last["open"])
+
+        # Check retest for entry on any active FVG with confirmed MSS
         for f in self.fvg_pool:
-            if not f["active"]:
+            if not f["active"] or not f.get("has_mss", True):
                 continue
                 
-            # Bullish setup
+            # Model 1 & 2: Bullish Setup (FVG or iFVG)
             if f["type"] in ["BULLISH_iFVG", "BULLISH"]:
-                # Current price or forming candle wicks into FVG zone
-                if (current_price <= f["top"] and current_price >= f["bottom"]) or (candles[-1]["low"] <= f["top"] and current_price >= f["bottom"]):
+                # Current price or forming candle wicks into FVG zone AND candle confirms reversal MSS
+                is_in_zone = (current_price <= f["top"] and current_price >= f["bottom"]) or (candles[-1]["low"] <= f["top"] and current_price >= f["bottom"])
+                if is_in_zone and retest_bull_mss:
                     entry_price = current_price
                     sl_price = f["bottom"] - 5.0
                     risk_dist = entry_price - sl_price
                     
-                    if risk_dist > 10.0 and (risk_dist / entry_price) < 0.02:
+                    if risk_dist > 20.0 and (risk_dist / entry_price) < 0.02:
                         tp1_price = entry_price + (self.partial_tp_rr * risk_dist)
                         tp2_price = entry_price + (self.min_rr * risk_dist)
                         
@@ -490,10 +505,10 @@ class LiveICTPaperBot:
                         self.save_state()
                         
                         entry_alert = (
-                            f"🚀 <b>ICT BOT: NEW LIVE TRADE ENTERED</b>\n"
+                            f"🚀 <b>ICT BOT: NEW LIVE TRADE ENTERED (MSS CONFIRMED)</b>\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
                             f"• <b>Trade #{self.active_trade['id']}</b> | <b>Side:</b> LONG 🟢\n"
-                            f"• <b>Setup Model:</b> {f['type']}\n"
+                            f"• <b>Setup Model:</b> {f['type']} (MSS Confirmed)\n"
                             f"• <b>Entry Price:</b> ${entry_price:,.1f}\n"
                             f"• <b>Stop Loss:</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
                             f"• <b>Take Profit 1 (1.5R):</b> ${tp1_price:,.1f} (50% exit + BE)\n"
@@ -506,15 +521,16 @@ class LiveICTPaperBot:
                         print(f"\n[LIVE TRADE ENTERED] LONG #{self.active_trade['id']} at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
                         break
 
-            # Bearish setup
+            # Model 1 & 2: Bearish Setup (FVG or iFVG)
             elif f["type"] in ["BEARISH_iFVG", "BEARISH"]:
-                # Current price or forming candle wicks into FVG zone
-                if (current_price >= f["bottom"] and current_price <= f["top"]) or (candles[-1]["high"] >= f["bottom"] and current_price <= f["top"]):
+                # Current price or forming candle wicks into FVG zone AND candle confirms reversal MSS
+                is_in_zone = (current_price >= f["bottom"] and current_price <= f["top"]) or (candles[-1]["high"] >= f["bottom"] and current_price <= f["top"])
+                if is_in_zone and retest_bear_mss:
                     entry_price = current_price
                     sl_price = f["top"] + 5.0
                     risk_dist = sl_price - entry_price
                     
-                    if risk_dist > 10.0 and (risk_dist / entry_price) < 0.02:
+                    if risk_dist > 20.0 and (risk_dist / entry_price) < 0.02:
                         tp1_price = entry_price - (self.partial_tp_rr * risk_dist)
                         tp2_price = entry_price - (self.min_rr * risk_dist)
                         
@@ -548,10 +564,10 @@ class LiveICTPaperBot:
                         self.save_state()
                         
                         entry_alert = (
-                            f"🚀 <b>ICT BOT: NEW LIVE TRADE ENTERED</b>\n"
+                            f"🚀 <b>ICT BOT: NEW LIVE TRADE ENTERED (MSS CONFIRMED)</b>\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
                             f"• <b>Trade #{self.active_trade['id']}</b> | <b>Side:</b> SHORT 🔴\n"
-                            f"• <b>Setup Model:</b> {f['type']}\n"
+                            f"• <b>Setup Model:</b> {f['type']} (MSS Confirmed)\n"
                             f"• <b>Entry Price:</b> ${entry_price:,.1f}\n"
                             f"• <b>Stop Loss:</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
                             f"• <b>Take Profit 1 (1.5R):</b> ${tp1_price:,.1f} (50% exit + BE)\n"

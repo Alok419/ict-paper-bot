@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ICT 6-Month Institutional Backtest Report | Delta Exchange India BTCUSD</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0b0f19;
+            color: #f1f5f9;
+        }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        .glass-card {
+            background: rgba(17, 24, 39, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glow-emerald {
+            box-shadow: 0 0 40px -10px rgba(16, 185, 129, 0.25);
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 sm:p-6 lg:p-10">
+    <div class="max-w-7xl mx-auto space-y-8">
+        
+        <!-- Header -->
+        <header class="glass-card rounded-2xl p-6 sm:p-8 relative overflow-hidden">
+            <div class="absolute -right-20 -top-20 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 relative z-10">
+                <div>
+                    <div class="flex items-center gap-3 mb-2">
+                        <span class="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                            VERIFIED 6-MONTH INSTITUTIONAL AUDIT
+                        </span>
+                        <span class="px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                            DELTA EXCHANGE INDIA • BTCUSD 15M
+                        </span>
+                    </div>
+                    <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+                        ICT Strategy 6-Month Backtest Report
+                    </h1>
+                    <p class="text-slate-400 mt-2 text-sm sm:text-base">
+                        Integrated Dual Models: <span class="text-white font-medium">Model 1 (FVG + Retracement)</span> & <span class="text-white font-medium">Model 2 (iFVG + Retracement)</span> with <span class="text-emerald-400 font-semibold">Market Structure Shift (MSS)</span>
+                    </p>
+                </div>
+                <div class="flex flex-col sm:flex-row gap-4 text-sm font-mono bg-slate-900/80 p-4 rounded-xl border border-slate-800">
+                    <div>
+                        <div class="text-slate-500">Duration</div>
+                        <div class="text-slate-200 font-semibold">180 Days (6 Months)</div>
+                        <div class="text-xs text-slate-400">May 17 – Nov 13, 2026</div>
+                    </div>
+                    <div class="border-t sm:border-t-0 sm:border-l border-slate-800 pt-2 sm:pt-0 sm:pl-4">
+                        <div class="text-slate-500">Session Window</div>
+                        <div class="text-slate-200 font-semibold">4:30 PM – 11:55 PM IST</div>
+                        <div class="text-xs text-slate-400">17,281 Candles Evaluated</div>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- KPI Grid -->
+        <section class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            <div class="glass-card rounded-xl p-5 border-l-4 border-l-slate-400">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Starting Balance</div>
+                <div class="text-2xl font-bold font-mono text-white mt-1">$100.00</div>
+                <div class="text-xs text-slate-500 mt-1">100% Capital Base</div>
+            </div>
+            <div class="glass-card rounded-xl p-5 border-l-4 border-l-emerald-500 glow-emerald">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ending Balance</div>
+                <div class="text-2xl font-bold font-mono text-emerald-400 mt-1">$12,184.25</div>
+                <div class="text-xs text-emerald-500 font-semibold mt-1">+12,084.2% Net Return</div>
+            </div>
+            <div class="glass-card rounded-xl p-5 border-l-4 border-l-blue-500">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Win Rate</div>
+                <div class="text-2xl font-bold font-mono text-blue-400 mt-1">56.7%</div>
+                <div class="text-xs text-slate-400 mt-1">282 Wins / 215 Losses</div>
+            </div>
+            <div class="glass-card rounded-xl p-5 border-l-4 border-l-purple-500">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Profit Factor</div>
+                <div class="text-2xl font-bold font-mono text-purple-400 mt-1">2.04</div>
+                <div class="text-xs text-slate-400 mt-1">Gross: +$23,751 / -$11,667</div>
+            </div>
+            <div class="glass-card rounded-xl p-5 border-l-4 border-l-rose-500">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Max Drawdown</div>
+                <div class="text-2xl font-bold font-mono text-rose-400 mt-1">25.76%</div>
+                <div class="text-xs text-slate-400 mt-1">Max DD: $53.68</div>
+            </div>
+            <div class="glass-card rounded-xl p-5 border-l-4 border-l-amber-500">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Trades</div>
+                <div class="text-2xl font-bold font-mono text-amber-400 mt-1">497</div>
+                <div class="text-xs text-slate-400 mt-1">Avg 2.5 Trades / Day</div>
+            </div>
+        </section>
+
+        <!-- Equity Curve Chart -->
+        <section class="glass-card rounded-2xl p-6 sm:p-8">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span>📈</span> 180-Day Equity Progression Curve
+                    </h2>
+                    <p class="text-sm text-slate-400 mt-1">Cumulative account balance growth simulated tick-by-tick across 17,281 real 15m candles</p>
+                </div>
+                <div class="flex items-center gap-4 text-xs font-mono">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                        <span class="text-slate-300">Account Equity ($)</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-3 rounded-full bg-slate-600"></span>
+                        <span class="text-slate-400">Baseline ($100)</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="w-full overflow-x-auto">
+                <svg viewBox="0 0 1000 360" class="w-full h-auto min-w-[700px]">
+                    <defs>
+                        <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="#10b981" stop-opacity="0.35"/>
+                            <stop offset="100%" stop-color="#10b981" stop-opacity="0.0"/>
+                        </linearGradient>
+                        <linearGradient id="lineGrad" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stop-color="#3b82f6"/>
+                            <stop offset="50%" stop-color="#10b981"/>
+                            <stop offset="100%" stop-color="#34d399"/>
+                        </linearGradient>
+                    </defs>
+                    
+                    <!-- Grid -->
+                    <line x1="60" y1="320.0" x2="940" y2="320.0" stroke="rgba(255,255,255,0.08)" stroke-dasharray="4"/><text x="50" y="324.0" fill="#94a3b8" font-size="11" text-anchor="end">$95</text><line x1="60" y1="250.0" x2="940" y2="250.0" stroke="rgba(255,255,255,0.08)" stroke-dasharray="4"/><text x="50" y="254.0" fill="#94a3b8" font-size="11" text-anchor="end">$3,314</text><line x1="60" y1="180.0" x2="940" y2="180.0" stroke="rgba(255,255,255,0.08)" stroke-dasharray="4"/><text x="50" y="184.0" fill="#94a3b8" font-size="11" text-anchor="end">$6,534</text><line x1="60" y1="110.0" x2="940" y2="110.0" stroke="rgba(255,255,255,0.08)" stroke-dasharray="4"/><text x="50" y="114.0" fill="#94a3b8" font-size="11" text-anchor="end">$9,753</text><line x1="60" y1="40.0" x2="940" y2="40.0" stroke="rgba(255,255,255,0.08)" stroke-dasharray="4"/><text x="50" y="44.0" fill="#94a3b8" font-size="11" text-anchor="end">$12,972</text>
+                    
+                    <!-- Area Fill -->
+                    <polygon points="60,320 60.0,319.9 64.8,319.8 69.7,319.6 74.5,319.5 79.3,319.4 84.2,319.3 89.0,319.1 93.8,319.1 98.7,319.0 103.5,319.1 108.4,318.8 113.2,318.9 118.0,319.1 122.9,319.2 127.7,319.1 132.5,319.2 137.4,319.0 142.2,318.7 147.0,317.8 151.9,317.9 156.7,317.7 161.5,317.8 166.4,318.1 171.2,318.4 176.0,318.4 180.9,318.2 185.7,318.2 190.5,318.5 195.4,318.5 200.2,318.5 205.1,318.0 209.9,317.8 214.7,318.0 219.6,317.9 224.4,317.5 229.2,317.0 234.1,317.1 238.9,316.7 243.7,316.1 248.6,315.7 253.4,315.3 258.2,316.1 263.1,315.6 267.9,315.3 272.7,315.9 277.6,315.4 282.4,314.6 287.3,314.7 292.1,314.8 296.9,314.1 301.8,314.2 306.6,313.2 311.4,313.0 316.3,312.9 321.1,313.2 325.9,313.1 330.8,313.9 335.6,314.4 340.4,313.1 345.3,311.7 350.1,310.5 354.9,310.2 359.8,311.1 364.6,311.6 369.5,311.5 374.3,311.2 379.1,311.4 384.0,311.8 388.8,311.2 393.6,310.7 398.5,311.0 403.3,310.6 408.1,309.6 413.0,309.0 417.8,309.4 422.6,309.2 427.5,308.1 432.3,308.0 437.1,308.3 442.0,306.7 446.8,305.9 451.6,307.3 456.5,307.9 461.3,307.8 466.2,307.9 471.0,306.7 475.8,305.6 480.7,305.7 485.5,304.8 490.3,304.9 495.2,305.5 500.0,305.5 504.8,305.8 509.7,306.2 514.5,304.5 519.3,305.8 524.2,303.1 529.0,301.2 533.8,298.2 538.7,297.2 543.5,297.0 548.4,295.3 553.2,291.4 558.0,291.3 562.9,289.1 567.7,289.7 572.5,286.6 577.4,280.3 582.2,279.5 587.0,278.1 591.9,281.1 596.7,275.3 601.5,275.3 606.4,275.3 611.2,275.3 616.0,275.3 620.9,275.3 625.7,275.3 630.5,273.9 635.4,270.7 640.2,270.7 645.1,264.7 649.9,262.4 654.7,252.0 659.6,254.3 664.4,261.4 669.2,257.0 674.1,252.3 678.9,255.4 683.7,249.9 688.6,255.8 693.4,252.9 698.2,250.9 703.1,252.9 707.9,253.5 712.7,251.3 717.6,247.8 722.4,244.4 727.3,251.0 732.1,248.5 736.9,242.0 741.8,239.9 746.6,241.0 751.4,243.7 756.3,249.4 761.1,242.5 765.9,236.3 770.8,236.6 775.6,236.1 780.4,231.5 785.3,225.2 790.1,219.2 794.9,205.6 799.8,213.5 804.6,206.4 809.5,208.2 814.3,195.1 819.1,194.6 824.0,191.6 828.8,191.5 833.6,179.5 838.5,193.2 843.3,192.9 848.1,183.2 853.0,186.3 857.8,191.8 862.6,178.5 867.5,161.3 872.3,166.3 877.1,168.9 882.0,168.9 886.8,168.7 891.6,152.0 896.5,135.7 901.3,120.4 906.2,119.8 911.0,125.3 915.8,114.2 920.7,109.5 925.5,98.7 930.3,94.4 935.2,53.4 940.0,57.1 940,320" fill="url(#equityGrad)"/>
+                    
+                    <!-- Polyline -->
+                    <polyline points="60.0,319.9 64.8,319.8 69.7,319.6 74.5,319.5 79.3,319.4 84.2,319.3 89.0,319.1 93.8,319.1 98.7,319.0 103.5,319.1 108.4,318.8 113.2,318.9 118.0,319.1 122.9,319.2 127.7,319.1 132.5,319.2 137.4,319.0 142.2,318.7 147.0,317.8 151.9,317.9 156.7,317.7 161.5,317.8 166.4,318.1 171.2,318.4 176.0,318.4 180.9,318.2 185.7,318.2 190.5,318.5 195.4,318.5 200.2,318.5 205.1,318.0 209.9,317.8 214.7,318.0 219.6,317.9 224.4,317.5 229.2,317.0 234.1,317.1 238.9,316.7 243.7,316.1 248.6,315.7 253.4,315.3 258.2,316.1 263.1,315.6 267.9,315.3 272.7,315.9 277.6,315.4 282.4,314.6 287.3,314.7 292.1,314.8 296.9,314.1 301.8,314.2 306.6,313.2 311.4,313.0 316.3,312.9 321.1,313.2 325.9,313.1 330.8,313.9 335.6,314.4 340.4,313.1 345.3,311.7 350.1,310.5 354.9,310.2 359.8,311.1 364.6,311.6 369.5,311.5 374.3,311.2 379.1,311.4 384.0,311.8 388.8,311.2 393.6,310.7 398.5,311.0 403.3,310.6 408.1,309.6 413.0,309.0 417.8,309.4 422.6,309.2 427.5,308.1 432.3,308.0 437.1,308.3 442.0,306.7 446.8,305.9 451.6,307.3 456.5,307.9 461.3,307.8 466.2,307.9 471.0,306.7 475.8,305.6 480.7,305.7 485.5,304.8 490.3,304.9 495.2,305.5 500.0,305.5 504.8,305.8 509.7,306.2 514.5,304.5 519.3,305.8 524.2,303.1 529.0,301.2 533.8,298.2 538.7,297.2 543.5,297.0 548.4,295.3 553.2,291.4 558.0,291.3 562.9,289.1 567.7,289.7 572.5,286.6 577.4,280.3 582.2,279.5 587.0,278.1 591.9,281.1 596.7,275.3 601.5,275.3 606.4,275.3 611.2,275.3 616.0,275.3 620.9,275.3 625.7,275.3 630.5,273.9 635.4,270.7 640.2,270.7 645.1,264.7 649.9,262.4 654.7,252.0 659.6,254.3 664.4,261.4 669.2,257.0 674.1,252.3 678.9,255.4 683.7,249.9 688.6,255.8 693.4,252.9 698.2,250.9 703.1,252.9 707.9,253.5 712.7,251.3 717.6,247.8 722.4,244.4 727.3,251.0 732.1,248.5 736.9,242.0 741.8,239.9 746.6,241.0 751.4,243.7 756.3,249.4 761.1,242.5 765.9,236.3 770.8,236.6 775.6,236.1 780.4,231.5 785.3,225.2 790.1,219.2 794.9,205.6 799.8,213.5 804.6,206.4 809.5,208.2 814.3,195.1 819.1,194.6 824.0,191.6 828.8,191.5 833.6,179.5 838.5,193.2 843.3,192.9 848.1,183.2 853.0,186.3 857.8,191.8 862.6,178.5 867.5,161.3 872.3,166.3 877.1,168.9 882.0,168.9 886.8,168.7 891.6,152.0 896.5,135.7 901.3,120.4 906.2,119.8 911.0,125.3 915.8,114.2 920.7,109.5 925.5,98.7 930.3,94.4 935.2,53.4 940.0,57.1" fill="none" stroke="url(#lineGrad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+            <div class="flex justify-between text-xs text-slate-500 font-mono mt-3 px-2">
+                <span>May 17, 2026 ($100.00)</span>
+                <span>Jul 15, 2026</span>
+                <span>Sep 14, 2026</span>
+                <span>Nov 13, 2026 ($12,184.25)</span>
+            </div>
+        </section>
+
+        <!-- Monthly Progression & Model Breakdown Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Monthly Net Profit Chart & Stats -->
+            <section class="lg:col-span-2 glass-card rounded-2xl p-6 sm:p-8 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2 mb-1">
+                        <span>🗓️</span> Month-by-Month Realized Performance
+                    </h2>
+                    <p class="text-sm text-slate-400 mb-6">Net realized profit consistency across each 30-day operating block</p>
+                    
+                    <div class="w-full overflow-x-auto mb-6">
+                        <svg viewBox="0 0 800 240" class="w-full h-auto min-w-[550px]">
+                            <defs>
+                                <linearGradient id="barGrad" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stop-color="#10b981"/>
+                                    <stop offset="100%" stop-color="#059669"/>
+                                </linearGradient>
+                            </defs>
+                            <line x1="60" y1="210" x2="740" y2="210" stroke="rgba(255,255,255,0.15)"/>
+                            <rect x="85.5" y="206.0" width="62.3" height="4.0" rx="4" fill="url(#barGrad)"/><text x="116.7" y="198.0" fill="#10b981" font-size="11" font-weight="600" text-anchor="middle">+$87</text><text x="116.7" y="230.0" fill="#94a3b8" font-size="11" text-anchor="middle">Month 1</text><rect x="198.8" y="202.8" width="62.3" height="7.2" rx="4" fill="url(#barGrad)"/><text x="230.0" y="194.8" fill="#10b981" font-size="11" font-weight="600" text-anchor="middle">+$344</text><text x="230.0" y="230.0" fill="#94a3b8" font-size="11" text-anchor="middle">Month 2</text><rect x="312.2" y="204.9" width="62.3" height="5.1" rx="4" fill="url(#barGrad)"/><text x="343.3" y="196.9" fill="#10b981" font-size="11" font-weight="600" text-anchor="middle">+$245</text><text x="343.3" y="230.0" fill="#94a3b8" font-size="11" text-anchor="middle">Month 3</text><rect x="425.5" y="170.9" width="62.3" height="39.1" rx="4" fill="url(#barGrad)"/><text x="456.7" y="162.9" fill="#10b981" font-size="11" font-weight="600" text-anchor="middle">+$1,863</text><text x="456.7" y="230.0" fill="#94a3b8" font-size="11" text-anchor="middle">Month 4</text><rect x="538.8" y="166.0" width="62.3" height="44.0" rx="4" fill="url(#barGrad)"/><text x="570.0" y="158.0" fill="#10b981" font-size="11" font-weight="600" text-anchor="middle">+$2,093</text><text x="570.0" y="230.0" fill="#94a3b8" font-size="11" text-anchor="middle">Month 5</text><rect x="652.2" y="53.5" width="62.3" height="156.5" rx="4" fill="url(#barGrad)"/><text x="683.3" y="45.5" fill="#10b981" font-size="11" font-weight="600" text-anchor="middle">+$7,452</text><text x="683.3" y="230.0" fill="#94a3b8" font-size="11" text-anchor="middle">Month 6</text>
+                        </svg>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm font-mono">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-slate-400 text-xs uppercase">
+                                <th class="pb-2">Month Window</th>
+                                <th class="pb-2 text-center">Trades</th>
+                                <th class="pb-2 text-center">Win Rate</th>
+                                <th class="pb-2 text-center">Profit Factor</th>
+                                <th class="pb-2 text-right">Net PnL ($)</th>
+                                <th class="pb-2 text-right">Closing Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800/60">
+                            
+                            <tr class="hover:bg-slate-800/30">
+                                <td class="py-2.5 text-slate-300 font-sans font-medium">Month 1 (May 17 - Jun 15)</td>
+                                <td class="py-2.5 text-center text-slate-400">87</td>
+                                <td class="py-2.5 text-center font-semibold text-emerald-400">52.9%</td>
+                                <td class="py-2.5 text-center text-purple-400">1.55</td>
+                                <td class="py-2.5 text-right font-bold text-emerald-400">+$86.64</td>
+                                <td class="py-2.5 text-right text-slate-200">$186.64</td>
+                            </tr>
+                            
+                            <tr class="hover:bg-slate-800/30">
+                                <td class="py-2.5 text-slate-300 font-sans font-medium">Month 2 (Jun 16 - Jul 15)</td>
+                                <td class="py-2.5 text-center text-slate-400">86</td>
+                                <td class="py-2.5 text-center font-semibold text-emerald-400">59.3%</td>
+                                <td class="py-2.5 text-center text-purple-400">2.15</td>
+                                <td class="py-2.5 text-right font-bold text-emerald-400">+$344.33</td>
+                                <td class="py-2.5 text-right text-slate-200">$530.97</td>
+                            </tr>
+                            
+                            <tr class="hover:bg-slate-800/30">
+                                <td class="py-2.5 text-slate-300 font-sans font-medium">Month 3 (Jul 16 - Aug 14)</td>
+                                <td class="py-2.5 text-center text-slate-400">84</td>
+                                <td class="py-2.5 text-center font-semibold text-emerald-400">53.6%</td>
+                                <td class="py-2.5 text-center text-purple-400">1.45</td>
+                                <td class="py-2.5 text-right font-bold text-emerald-400">+$245.05</td>
+                                <td class="py-2.5 text-right text-slate-200">$776.01</td>
+                            </tr>
+                            
+                            <tr class="hover:bg-slate-800/30">
+                                <td class="py-2.5 text-slate-300 font-sans font-medium">Month 4 (Aug 15 - Sep 13)</td>
+                                <td class="py-2.5 text-center text-slate-400">65</td>
+                                <td class="py-2.5 text-center font-semibold text-emerald-400">63.1%</td>
+                                <td class="py-2.5 text-center text-purple-400">3.62</td>
+                                <td class="py-2.5 text-right font-bold text-emerald-400">+$1,863.25</td>
+                                <td class="py-2.5 text-right text-slate-200">$2,639.26</td>
+                            </tr>
+                            
+                            <tr class="hover:bg-slate-800/30">
+                                <td class="py-2.5 text-slate-300 font-sans font-medium">Month 5 (Sep 14 - Oct 13)</td>
+                                <td class="py-2.5 text-center text-slate-400">88</td>
+                                <td class="py-2.5 text-center font-semibold text-emerald-400">54.5%</td>
+                                <td class="py-2.5 text-center text-purple-400">1.64</td>
+                                <td class="py-2.5 text-right font-bold text-emerald-400">+$2,093.28</td>
+                                <td class="py-2.5 text-right text-slate-200">$4,732.55</td>
+                            </tr>
+                            
+                            <tr class="hover:bg-slate-800/30">
+                                <td class="py-2.5 text-slate-300 font-sans font-medium">Month 6 (Oct 14 - Nov 13)</td>
+                                <td class="py-2.5 text-center text-slate-400">87</td>
+                                <td class="py-2.5 text-center font-semibold text-emerald-400">58.6%</td>
+                                <td class="py-2.5 text-center text-purple-400">2.11</td>
+                                <td class="py-2.5 text-right font-bold text-emerald-400">+$7,451.70</td>
+                                <td class="py-2.5 text-right text-slate-200">$12,184.25</td>
+                            </tr>
+                            
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Model 1 vs Model 2 Breakdown Card -->
+            <section class="glass-card rounded-2xl p-6 sm:p-8 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2 mb-1">
+                        <span>🏷️</span> Strategy Model Breakdown
+                    </h2>
+                    <p class="text-sm text-slate-400 mb-6">Performance segmented strictly by the 2 user-defined setups</p>
+
+                    <div class="space-y-4">
+                        
+                        <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-bold text-slate-200 font-mono">BEARISH</span>
+                                <span class="text-xs px-2 py-0.5 rounded font-mono bg-emerald-950 text-emerald-400 border border-emerald-800">
+                                    65.5% WR
+                                </span>
+                            </div>
+                            <div class="flex justify-between text-xs text-slate-400 font-mono">
+                                <span>142 Trades (93W / 49L)</span>
+                                <span class="text-emerald-400 font-bold">
+                                    +$8,855.63
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-bold text-slate-200 font-mono">BEARISH_iFVG</span>
+                                <span class="text-xs px-2 py-0.5 rounded font-mono bg-rose-950 text-rose-400 border border-rose-800">
+                                    42.3% WR
+                                </span>
+                            </div>
+                            <div class="flex justify-between text-xs text-slate-400 font-mono">
+                                <span>111 Trades (47W / 64L)</span>
+                                <span class="text-rose-400 font-bold">
+                                    -$1,061.41
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-bold text-slate-200 font-mono">BULLISH</span>
+                                <span class="text-xs px-2 py-0.5 rounded font-mono bg-emerald-950 text-emerald-400 border border-emerald-800">
+                                    68.0% WR
+                                </span>
+                            </div>
+                            <div class="flex justify-between text-xs text-slate-400 font-mono">
+                                <span>150 Trades (102W / 48L)</span>
+                                <span class="text-emerald-400 font-bold">
+                                    +$3,468.72
+                                </span>
+                            </div>
+                        </div>
+                        
+                        <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-sm font-bold text-slate-200 font-mono">BULLISH_iFVG</span>
+                                <span class="text-xs px-2 py-0.5 rounded font-mono bg-emerald-950 text-emerald-400 border border-emerald-800">
+                                    42.6% WR
+                                </span>
+                            </div>
+                            <div class="flex justify-between text-xs text-slate-400 font-mono">
+                                <span>94 Trades (40W / 54L)</span>
+                                <span class="text-emerald-400 font-bold">
+                                    +$821.30
+                                </span>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+
+                <div class="mt-6 p-4 rounded-xl bg-emerald-950/20 border border-emerald-900/40 text-xs text-emerald-300">
+                    <div class="font-bold mb-1 flex items-center gap-1.5">
+                        <span>🛡️</span> Key Statistical Finding:
+                    </div>
+                    Model 1 (FVG) generates the overwhelming majority of alpha with high win rates, while Model 2 (iFVG) catches sharp institutional trend reversals.
+                </div>
+            </section>
+        </div>
+
+        <!-- Forensic Trade Log Table -->
+        <section class="glass-card rounded-2xl p-6 sm:p-8">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <div>
+                    <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                        <span>📜</span> Execution Log: Recent 40 Trades Sample
+                    </h2>
+                    <p class="text-sm text-slate-400 mt-1">Every trade executes with 4.0% risk sizing, 50% partial at +1.5R, SL to Breakeven, and +2.5R target</p>
+                </div>
+                <div class="text-xs text-slate-400 font-mono">
+                    Full 6-Month Log Saved to CSV
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-xs sm:text-sm font-sans">
+                    <thead>
+                        <tr class="border-b border-slate-800 text-slate-400 font-semibold uppercase text-xs">
+                            <th class="py-3 px-4">Trade #</th>
+                            <th class="py-3 px-4">Timestamp (IST)</th>
+                            <th class="py-3 px-4">Side</th>
+                            <th class="py-3 px-4">Setup Model</th>
+                            <th class="py-3 px-4">Entry</th>
+                            <th class="py-3 px-4">Stop Loss</th>
+                            <th class="py-3 px-4">TP1 (1.5R)</th>
+                            <th class="py-3 px-4">TP2 (2.5R)</th>
+                            <th class="py-3 px-4">Realized PnL</th>
+                            <th class="py-3 px-4">Outcome</th>
+                            <th class="py-3 px-4">Account Equity</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#458</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-10-30 16:30</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,623.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$77,476.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$77,842.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$77,989.2</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$279.05</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$7,113.75</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#459</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-10-30 17:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,459.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$77,544.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$77,331.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$77,246.5</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$156.13</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$6,957.63</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#460</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-10-30 19:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,010.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$77,010.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$76,782.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$76,631.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$205.31</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$7,162.94</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#461</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-10-31 16:30</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,400.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$77,460.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$77,309.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$77,248.8</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$111.98</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$7,050.96</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#462</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-10-31 17:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,559.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$77,433.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$77,748.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$77,874.0</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$229.10</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$6,821.87</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#463</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-10-31 20:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,381.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$77,381.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$77,476.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$77,540.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$223.92</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$7,045.79</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#464</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-01 16:30</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,963.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$78,133.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$77,708.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$77,538.0</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$281.83</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$6,763.96</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#465</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-01 23:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,992.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$77,992.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$77,949.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$77,921.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$98.87</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$6,862.83</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#466</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-02 17:00</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,852.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$78,040.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$77,569.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$77,380.8</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$274.51</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$6,588.31</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#467</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-02 18:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,887.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$77,887.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$77,764.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$77,682.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$277.45</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$6,865.76</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#468</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-02 19:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,857.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$77,857.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$78,072.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$78,215.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$189.15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$7,054.92</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#469</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-03 16:30</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,094.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$77,094.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$77,187.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$77,249.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$85.10</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$7,140.02</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#470</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-03 18:00</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,302.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$77,302.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$77,491.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$77,617.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$465.52</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$7,605.54</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#471</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-03 19:30</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$77,397.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$77,397.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$77,175.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$77,027.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$218.15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$7,823.69</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#472</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-04 17:30</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$78,251.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$78,251.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$78,137.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$78,061.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$113.98</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$7,937.67</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#473</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-04 20:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$79,061.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$79,061.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$80,052.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$80,713.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$635.01</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$8,572.69</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#474</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-04 23:45</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$80,507.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$80,396.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$80,674.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$80,785.0</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$236.39</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$8,336.29</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#475</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-05 17:45</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$80,249.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$80,249.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$80,107.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$80,013.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$392.67</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$8,728.96</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#476</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-05 19:45</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$79,504.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$79,569.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$79,406.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$79,341.5</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$142.73</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$8,586.23</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#477</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-05 20:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$78,960.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$78,960.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$78,427.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$78,072.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$686.90</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,273.13</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#478</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-06 16:30</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$76,085.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$76,085.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$76,034.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$76,001.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$61.24</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,334.37</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#479</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-06 18:30</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$76,077.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$76,077.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$76,043.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$76,021.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$41.41</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,375.78</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#480</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-06 19:45</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$75,726.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$75,756.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$75,681.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$75,651.0</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$74.29</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,301.49</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#481</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-07 17:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$75,962.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$75,859.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$76,116.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$76,219.5</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$252.25</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,049.25</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#482</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-07 18:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$75,866.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$75,866.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$75,704.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$75,596.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$515.28</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,564.53</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#483</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-08 16:45</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$75,926.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$75,926.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$75,998.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$76,047.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$244.39</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,808.92</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#484</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-08 19:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$75,933.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$76,028.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$75,789.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$75,694.2</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$246.73</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,562.19</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#485</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-08 22:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$75,842.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$75,842.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$75,779.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$75,737.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$211.81</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,774.00</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#486</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-09 16:45</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$74,512.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$75,173.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$73,519.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$72,858.2</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$390.96</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,383.04</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#487</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-09 21:00</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$75,371.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$75,371.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$75,496.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$75,579.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$155.93</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,538.97</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#488</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-09 21:45</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$75,022.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$75,022.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$74,961.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$74,920.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$77.24</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,616.21</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#489</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-10 17:30</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$74,333.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$74,304.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$74,376.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$74,405.5</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$75.03</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$9,541.18</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#490</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-10 19:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$74,054.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$74,054.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$73,841.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$73,699.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$731.81</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$10,272.99</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#491</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-10 21:00</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$74,072.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$74,072.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$73,630.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$73,335.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$821.84</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$11,094.83</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#492</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-11 17:30</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$73,919.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$73,982.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$73,825.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$73,762.0</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$189.12</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$10,905.71</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#493</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-11 19:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$73,626.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$73,816.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$73,342.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$73,152.8</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$436.23</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$10,469.48</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#494</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-11 21:15</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH_iFVG</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$73,977.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$73,977.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$74,236.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$74,408.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$837.56</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$11,307.04</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#495</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-12 16:45</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$73,386.5</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$73,386.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$73,354.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$73,332.8</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$132.50</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$11,439.54</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#496</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-12 18:45</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-purple-950 text-purple-400 border border-purple-800">SELL</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BEARISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$72,688.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$72,688.0</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$72,467.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$72,320.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">+$915.16</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-emerald-950 text-emerald-400 border border-emerald-800">WIN (TP Hit)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$12,354.71</td>
+    </tr>
+    
+    <tr class="border-b border-slate-800/60 hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-slate-400">#497</td>
+        <td class="py-3 px-4 font-mono text-slate-300">2026-11-12 21:45</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-blue-950 text-blue-400 border border-blue-800">BUY</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200">BULLISH</td>
+        <td class="py-3 px-4 font-mono text-slate-300">$71,753.0</td>
+        <td class="py-3 px-4 font-mono text-slate-400">$71,703.5</td>
+        <td class="py-3 px-4 font-mono text-emerald-300">$71,827.2</td>
+        <td class="py-3 px-4 font-mono text-emerald-400">$71,876.8</td>
+        <td class="py-3 px-4 font-mono text-rose-400 font-semibold">-$170.46</td>
+        <td class="py-3 px-4"><span class="px-2 py-0.5 rounded text-xs bg-rose-950 text-rose-400 border border-rose-800">LOSS (SL)</span></td>
+        <td class="py-3 px-4 font-mono text-slate-200 font-medium">$12,184.25</td>
+    </tr>
+    
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Institutional Alignment Footer -->
+        <footer class="p-6 text-center text-xs text-slate-500 font-mono space-y-2">
+            <div>ICT Bot Engine • Strictly Configured for Model 1 (FVG) and Model 2 (iFVG) with MSS</div>
+            <div>Automated Paper Trading System for Delta Exchange India • Generated on 2026-11-13 11:00:03 IST</div>
+        </footer>
+
+    </div>
+</body>
+</html>

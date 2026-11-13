@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 data/live_paper_state.json
+data/*.csv
+data/*.json
+scratch/
