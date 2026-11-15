@@ -178,7 +178,7 @@ def fetch_live_ticker(symbol="BTCUSD"):
 # 3. LIVE PAPER TRADING ENGINE
 # -----------------------------------------------------------------------------
 class LiveICTPaperBot:
-    def __init__(self, initial_capital=100.0, max_leverage=50.0,
+    def __init__(self, initial_capital=100.0, max_leverage=40.0,
                  risk_per_trade=0.10, daily_loss_limit=0.20, max_trades_daily=3,
                  min_rr=2.5, partial_tp_rr=1.5, partial_tp_pct=0.5):
         # Resolve Environment Variables (Defaults to REAL mode for production)
@@ -186,7 +186,8 @@ class LiveICTPaperBot:
         api_k = get_env_variable(["DELTA_API_KEY", "DELTA_KEY", "API_KEY", "DELTA_EXCHANGE_API_KEY"])
         api_s = get_env_variable(["DELTA_API_SECRET", "DELTA_SECRET", "API_SECRET", "DELTA_EXCHANGE_API_SECRET"])
         
-        self.max_leverage = float(get_env_variable(["MAX_LEVERAGE", "LEVERAGE"], str(max_leverage)))
+        raw_lev = float(get_env_variable(["MAX_LEVERAGE", "LEVERAGE"], "40.0"))
+        self.max_leverage = min(40.0, raw_lev) if raw_lev > 40.0 else raw_lev
         self.risk_per_trade = float(get_env_variable(["RISK_PER_TRADE", "RISK"], str(risk_per_trade)))
         self.daily_loss_limit = float(get_env_variable(["DAILY_LOSS_LIMIT", "DAILY_LOSS"], str(daily_loss_limit)))
         self.max_trades_daily = int(get_env_variable(["MAX_TRADES_DAILY", "MAX_TRADES"], str(max_trades_daily)))
@@ -276,7 +277,7 @@ class LiveICTPaperBot:
             if self.delta_client:
                 api_ok, auth_msg = self.delta_client.verify_api_connection()
                 if api_ok:
-                    status_line = f"\n• <b>Delta Exchange API:</b> 🟢 CONNECTED & AUTHENTICATED (50x Active)"
+                    status_line = f"\n• <b>Delta Exchange API:</b> 🟢 CONNECTED & AUTHENTICATED ({self.max_leverage:.0f}x Active)"
                 else:
                     status_line = f"\n• <b>Delta Exchange API:</b> 🔴 {auth_msg}"
             else:
