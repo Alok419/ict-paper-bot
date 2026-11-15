@@ -34,10 +34,10 @@ DELTA_BASE_URL = "https://api.india.delta.exchange/v2"
 # -----------------------------------------------------------------------------
 def load_env():
     env = {}
-    # 1. Read from OS Environment (Cloud Platforms: Railway, Render, Docker)
-    for k in ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"]:
-        if k in os.environ and os.environ[k]:
-            env[k] = os.environ[k].strip().strip('"').strip("'")
+    # 1. Read ALL OS Environment Variables (Cloud Platforms: Railway, Render, Docker)
+    for k, v in os.environ.items():
+        if v:
+            env[k] = str(v).strip().strip('"').strip("'")
             
     # 2. Fallback to local .env file
     if os.path.exists(ENV_FILE):
@@ -150,24 +150,42 @@ class LiveICTPaperBot:
         
         # Real Trading Client Initialization
         self.delta_client = None
+        self.connection_msg = ""
+        self.balance_desc = ""
+        
+        api_k = env.get("DELTA_API_KEY", os.environ.get("DELTA_API_KEY", "")).strip().strip('"').strip("'")
+        api_s = env.get("DELTA_API_SECRET", os.environ.get("DELTA_API_SECRET", "")).strip().strip('"').strip("'")
+        explicit_mode = env.get("TRADING_MODE", os.environ.get("TRADING_MODE", "")).strip().strip('"').strip("'").upper()
+        
+        # Auto-activate REAL mode if API keys are present or TRADING_MODE is REAL
+        if explicit_mode == "REAL" or (api_k and api_s and explicit_mode != "PAPER"):
+            self.trading_mode = "REAL"
+        else:
+            self.trading_mode = "PAPER"
+            
         if self.trading_mode == "REAL":
-            api_k = env.get("DELTA_API_KEY", os.environ.get("DELTA_API_KEY", ""))
-            api_s = env.get("DELTA_API_SECRET", os.environ.get("DELTA_API_SECRET", ""))
             if api_k and api_s:
                 self.delta_client = DeltaExchangeLiveClient(api_key=api_k, api_secret=api_s)
                 print(f"[REAL TRADING] DeltaExchangeLiveClient initialized with {self.max_leverage}x leverage cap.", flush=True)
                 try:
-                    live_bal = self.delta_client.get_available_balance_usd()
-                    if live_bal > 0:
-                        self.capital = live_bal
-                        self.initial_capital = live_bal
-                        print(f"[REAL TRADING] Live Delta wallet balance synchronized: ${self.capital:,.2f}", flush=True)
+                    bal_usd, bal_inr, bal_desc = self.delta_client.get_available_balance_usd()
+                    self.balance_desc = bal_desc
+                    if bal_usd > 0:
+                        self.capital = bal_usd
+                        self.initial_capital = bal_usd
+                        self.connection_msg = f"Connected. Live Balance: {bal_desc}"
+                        print(f"[REAL TRADING] Live Delta wallet balance synchronized: {bal_desc}", flush=True)
+                    else:
+                        self.connection_msg = f"Handshake response: {bal_desc}"
+                        print(f"[REAL TRADING NOTICE] Balance returned: {bal_desc}", flush=True)
                     # Configure leverage on Delta Exchange for BTCUSD
                     self.delta_client.set_leverage(product_id=27, leverage=self.max_leverage)
                 except Exception as e:
+                    self.connection_msg = f"Error querying balance: {e}"
                     print(f"[REAL TRADING WARNING] Error fetching initial live balance: {e}", flush=True)
             else:
-                print("[REAL TRADING WARNING] DELTA_API_KEY or DELTA_API_SECRET missing in environment. Falling back to Paper Mode.", flush=True)
+                self.connection_msg = "DELTA_API_KEY or DELTA_API_SECRET missing in environment. Falling back to Paper Mode."
+                print(f"[REAL TRADING WARNING] {self.connection_msg}", flush=True)
                 self.trading_mode = "PAPER"
         
         self.load_state()
@@ -177,18 +195,24 @@ class LiveICTPaperBot:
         # Sync live balance if real mode
         if self.trading_mode == "REAL" and self.delta_client:
             try:
-                bal = self.delta_client.get_available_balance_usd()
-                if bal > 0:
-                    self.capital = bal
+                bal_usd, bal_inr, bal_desc = self.delta_client.get_available_balance_usd()
+                if bal_usd > 0:
+                    self.capital = bal_usd
+                    self.balance_desc = bal_desc
+                else:
+                    self.balance_desc = bal_desc
             except Exception as e:
+                self.balance_desc = f"Error: {e}"
                 print(f"Error checking live balance: {e}", flush=True)
 
         mode_badge = "🔥 REAL MONEY LIVE" if self.trading_mode == "REAL" else "📝 PAPER TRADING"
-        bal_text = f"${self.capital:,.2f} USD (~₹{self.capital * 84:,.0f} INR)" if self.trading_mode == "REAL" else f"${self.capital:,.2f}"
+        bal_text = self.balance_desc if (self.trading_mode == "REAL" and self.balance_desc) else f"${self.capital:,.2f}"
         ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
         now_ist = datetime.datetime.now(ist)
         is_active = self.is_in_session(now_ist)
-        sess_badge = "🟢 ACTIVE SESSION" if is_active else "⏳ STANDBY (Opens 4:30 PM IST)"
+        sess_badge = "🟢 ACTIVE SESSION (4:30 PM - 9:00 AM IST)" if is_active else "⏳ STANDBY (Next session: 4:30 PM IST)"
+        
+        status_line = f"\n• <b>Connection:</b> <code>{self.connection_msg}</code>" if (self.trading_mode == "REAL" and self.connection_msg) else ""
         
         msg = (
             f"🚀 <b>ICT BOT: SYSTEM ONLINE ({mode_badge})</b>\n"
@@ -196,6 +220,7 @@ class LiveICTPaperBot:
             f"• <b>Session Status:</b> {sess_badge}\n"
             f"• <b>Trading Mode:</b> {mode_badge}\n"
             f"• <b>Live Wallet Balance:</b> {bal_text}\n"
+            f"• <b>Active Hours:</b> 4:30 PM to 9:00 AM IST (Overnight){status_line}\n"
             f"• <b>Max Leverage:</b> {self.max_leverage:.0f}x Capped\n"
             f"• <b>Risk Per Trade:</b> {self.risk_per_trade*100:.1f}%\n"
             f"• <b>Daily Loss Circuit Breaker:</b> {self.daily_loss_limit*100:.1f}%\n"
@@ -206,20 +231,23 @@ class LiveICTPaperBot:
 
     def send_hourly_heartbeat(self, current_price, now_ist):
         is_active = self.is_in_session(now_ist)
-        session_text = "🟢 ACTIVE SESSION (Trading)" if is_active else "⏳ STANDBY (Next session: 4:30 PM IST)"
-        today_str = now_ist.strftime("%Y-%m-%d")
+        session_text = "🟢 ACTIVE SESSION (4:30 PM - 9:00 AM IST)" if is_active else "⏳ STANDBY (Next session: 4:30 PM IST)"
+        today_str = self.get_session_date(now_ist)
         day_stats = self.daily_stats.get(today_str, {"trades": 0, "pnl_usd": 0.0, "pnl_pct": 0.0})
         
         # Sync live wallet balance if real mode
         if self.trading_mode == "REAL" and self.delta_client:
             try:
-                live_bal = self.delta_client.get_available_balance_usd()
-                if live_bal > 0:
-                    self.capital = live_bal
+                bal_usd, bal_inr, bal_desc = self.delta_client.get_available_balance_usd()
+                if bal_usd > 0:
+                    self.capital = bal_usd
+                    self.balance_desc = bal_desc
+                elif bal_desc:
+                    self.balance_desc = bal_desc
             except Exception as e:
                 pass
 
-        bal_display = f"${self.capital:,.2f} (~₹{self.capital * 84:,.0f} INR)" if self.trading_mode == "REAL" else f"${self.capital:,.2f}"
+        bal_display = self.balance_desc if (self.trading_mode == "REAL" and self.balance_desc) else f"${self.capital:,.2f}"
         mode_badge = "🔥 REAL MONEY" if self.trading_mode == "REAL" else "📝 PAPER"
 
         trade_status_text = "None (Scanning 15m candles for setups)"
@@ -249,25 +277,26 @@ class LiveICTPaperBot:
         send_telegram_alert(msg)
 
     def send_daily_summary(self, now_ist):
-        today_str = now_ist.strftime("%Y-%m-%d")
-        day_stats = self.daily_stats.get(today_str, {"trades": 0, "pnl_usd": 0.0, "pnl_pct": 0.0})
-        today_trades = [t for t in self.completed_trades if t.get("date_str") == today_str]
+        session_str = self.get_session_date(now_ist - datetime.timedelta(minutes=5))
+        day_stats = self.daily_stats.get(session_str, {"trades": 0, "pnl_usd": 0.0, "pnl_pct": 0.0})
+        today_trades = [t for t in self.completed_trades if t.get("date_str") == session_str]
         wins = len([t for t in today_trades if t.get("realized_pnl", 0) > 0])
         losses = len([t for t in today_trades if t.get("realized_pnl", 0) < 0])
         
         pnl_sign = "+" if day_stats["pnl_usd"] >= 0 else "-"
-        total_growth = ((self.capital - self.initial_capital) / self.initial_capital) * 100.0
+        total_growth = ((self.capital - self.initial_capital) / self.initial_capital) * 100.0 if self.initial_capital > 0 else 0.0
+        bal_display = self.balance_desc if (self.trading_mode == "REAL" and self.balance_desc) else f"${self.capital:,.2f}"
         
         msg = (
-            f"🌙 <b>ICT BOT: DAILY SESSION SUMMARY (11:55 PM IST)</b>\n"
+            f"🌙 <b>ICT BOT: OVERNIGHT SESSION SUMMARY (9:00 AM IST)</b>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
-            f"• <b>Date:</b> {today_str}\n"
-            f"• <b>Today's Trades:</b> {day_stats['trades']} taken ({wins} Wins / {losses} Losses)\n"
-            f"• <b>Today's Realized PnL:</b> {pnl_sign}${abs(day_stats['pnl_usd']):.2f} ({day_stats['pnl_pct']*100:+.1f}%)\n"
-            f"• <b>Closing Account Balance:</b> ${self.capital:,.2f}\n"
+            f"• <b>Session Date:</b> {session_str}\n"
+            f"• <b>Trades Taken:</b> {day_stats['trades']} ({wins} Wins / {losses} Losses)\n"
+            f"• <b>Session Realized PnL:</b> {pnl_sign}${abs(day_stats['pnl_usd']):.2f} ({day_stats['pnl_pct']*100:+.1f}%)\n"
+            f"• <b>Closing Account Balance:</b> {bal_display}\n"
             f"• <b>Total Net Return (All Time):</b> {total_growth:+.1f}%\n"
             f"• <b>Active Runners:</b> {'Running to SL/TP' if self.active_trade else 'None'}\n"
-            f"• <i>Session closed. New trade entries will resume tomorrow at 4:30 PM IST.</i>"
+            f"• <i>Session closed. New trade entries will resume today at 4:30 PM IST.</i>"
         )
         send_telegram_alert(msg)
 
@@ -276,7 +305,8 @@ class LiveICTPaperBot:
             try:
                 with open(STATE_FILE, mode="r", encoding="utf-8") as f:
                     st = json.load(f)
-                    self.capital = st.get("capital", self.initial_capital)
+                    if self.trading_mode != "REAL" or self.capital == self.initial_capital:
+                        self.capital = st.get("capital", self.initial_capital)
                     self.active_trade = st.get("active_trade", None)
                     self.daily_stats = st.get("daily_stats", {})
                     self.completed_trades = st.get("completed_trades", [])
@@ -297,19 +327,30 @@ class LiveICTPaperBot:
         with open(STATE_FILE, mode="w", encoding="utf-8") as f:
             json.dump(st, f, indent=2)
 
+    def get_session_date(self, now_ist):
+        """
+        Trading session runs 4:30 PM (16:30 IST) overnight through midnight to 9:00 AM (09:00 IST).
+        Hours 00:00 to 08:59 belong to the session that opened at 16:30 yesterday.
+        """
+        if now_ist.hour < 9:
+            return (now_ist - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        return now_ist.strftime("%Y-%m-%d")
+
     def is_in_session(self, now_ist=None):
         if now_ist is None:
             ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
             now_ist = datetime.datetime.now(ist)
         h = now_ist.hour
         m = now_ist.minute
-        # 4:30 PM (16:30) to 11:55 PM (23:55) IST
-        return ((h == 16 and m >= 30) or (17 <= h < 23) or (h == 23 and m < 55))
+        # 4:30 PM (16:30 IST) overnight through midnight to 9:00 AM (09:00 IST)
+        is_evening = (h == 16 and m >= 30) or (17 <= h <= 23)
+        is_morning = (0 <= h < 9)
+        return is_evening or is_morning
 
     def process_tick(self):
         ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
         now_ist = datetime.datetime.now(ist)
-        today_str = now_ist.strftime("%Y-%m-%d")
+        today_str = self.get_session_date(now_ist)
         
         if today_str not in self.daily_stats:
             self.daily_stats[today_str] = {
@@ -589,7 +630,9 @@ class LiveICTPaperBot:
                         
                         # Contract sizing on Delta Exchange India (1 contract = 0.001 BTC)
                         contract_val_usd = entry_price * 0.001
-                        num_contracts = max(1, int(round(notional_usd / contract_val_usd)))
+                        max_allowed_contracts = max(1, int((self.capital * self.max_leverage) / contract_val_usd))
+                        calculated_contracts = max(1, int(round(notional_usd / contract_val_usd)))
+                        num_contracts = min(calculated_contracts, max_allowed_contracts)
                         btc_size = num_contracts * 0.001
                         actual_notional = num_contracts * contract_val_usd
                         
@@ -668,7 +711,9 @@ class LiveICTPaperBot:
                         
                         # Contract sizing on Delta Exchange India (1 contract = 0.001 BTC)
                         contract_val_usd = entry_price * 0.001
-                        num_contracts = max(1, int(round(notional_usd / contract_val_usd)))
+                        max_allowed_contracts = max(1, int((self.capital * self.max_leverage) / contract_val_usd))
+                        calculated_contracts = max(1, int(round(notional_usd / contract_val_usd)))
+                        num_contracts = min(calculated_contracts, max_allowed_contracts)
                         btc_size = num_contracts * 0.001
                         actual_notional = num_contracts * contract_val_usd
                         
@@ -736,12 +781,13 @@ def run_live_loop():
     bot = LiveICTPaperBot()
     ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
     
+    bal_str = bot.balance_desc if (bot.trading_mode == 'REAL' and bot.balance_desc) else f"${bot.capital:,.2f} (~₹{bot.capital * 84:,.0f} INR)"
     print("\n" + "="*65)
     print(f"      ICT LIVE TRADING ENGINE - DELTA EXCHANGE INDIA ({bot.trading_mode})")
     print("="*65)
     print(f"Trading Mode:                {bot.trading_mode}")
-    print(f"Current Capital:             ${bot.capital:,.2f} (~₹{bot.capital * 84:,.0f} INR)")
-    print(f"Trading Session:             4:30 PM to 11:55 PM IST (Daily)")
+    print(f"Current Capital:             {bal_str}")
+    print(f"Trading Session:             4:30 PM to 9:00 AM IST (Overnight)")
     print(f"Max Leverage Cap:            {bot.max_leverage:.0f}x")
     print(f"Risk Per Trade:              {bot.risk_per_trade*100:.1f}% (${bot.capital * bot.risk_per_trade:,.2f})")
     print(f"Daily Loss Limit:            {bot.daily_loss_limit*100:.1f}% (${bot.capital * bot.daily_loss_limit:,.2f})")
@@ -774,26 +820,29 @@ def run_live_loop():
                 except Exception as e:
                     print(f"Error sending hourly heartbeat: {e}", flush=True)
 
-            # Daily Summary at 11:55 PM IST (23:55)
-            if now_ist.hour == 23 and now_ist.minute >= 55 and not bot.daily_summary_sent:
+            # Daily Summary at 9:00 AM IST (when overnight session concludes)
+            if now_ist.hour == 9 and now_ist.minute < 5 and not bot.daily_summary_sent:
                 try:
                     bot.send_daily_summary(now_ist)
                     bot.daily_summary_sent = True
                 except Exception as e:
                     print(f"Error sending daily summary: {e}", flush=True)
-            elif now_ist.hour != 23:
+            elif now_ist.hour != 9:
                 bot.daily_summary_sent = False
 
-            # Session open notification
+            # Session open notification (fires when entering 4:30 PM)
             if is_active and not bot.session_notified:
                 bot.session_notified = True
+                bal_display = bot.balance_desc if (bot.trading_mode == "REAL" and bot.balance_desc) else f"${bot.capital:,.2f}"
+                mode_badge = "🔥 REAL MONEY LIVE" if bot.trading_mode == "REAL" else "📝 PAPER TRADING"
                 open_msg = (
-                    "🟢 <b>ICT SESSION OPEN: 4:30 PM IST</b>\n"
+                    "🟢 <b>ICT OVERNIGHT SESSION OPEN: 4:30 PM IST</b>\n"
                     "━━━━━━━━━━━━━━━━━━━\n"
                     "• <b>Symbol:</b> BTCUSD (Delta Exchange India)\n"
+                    f"• <b>Trading Mode:</b> {mode_badge}\n"
                     "• <b>Status:</b> Scanning live 15m candles for ICT setups.\n"
-                    "• <b>Capital:</b> ${:,.2f}\n"
-                    "• <b>Active Hours:</b> 4:30 PM - 11:55 PM IST".format(bot.capital)
+                    f"• <b>Capital:</b> {bal_display}\n"
+                    "• <b>Active Hours:</b> 4:30 PM to 9:00 AM IST (Overnight)"
                 )
                 send_telegram_alert(open_msg)
             elif not is_active:
@@ -805,7 +854,8 @@ def run_live_loop():
                 price_str = f"${ticker['close']:,.1f}" if ticker else "N/A"
                 trade_str = f"ACTIVE ({bot.active_trade['side']} @ ${bot.active_trade['entry']:,.1f})" if bot.active_trade else "No Open Trade"
                 session_str = "ACTIVE SESSION 🟢" if is_active else "STANDBY (Opens 4:30 PM IST) ⏳"
-                print(f"[{now_ist.strftime('%I:%M:%S %p')} IST] BTC: {price_str} | Session: {session_str} | Status: {trade_str} | Balance: ${bot.capital:,.2f}", flush=True)
+                bal_disp = bot.balance_desc if (bot.trading_mode == 'REAL' and bot.balance_desc) else f"${bot.capital:,.2f}"
+                print(f"[{now_ist.strftime('%I:%M:%S %p')} IST] BTC: {price_str} | Session: {session_str} | Status: {trade_str} | Balance: {bal_disp}", flush=True)
                 bot.save_state()
                 
             iteration += 1

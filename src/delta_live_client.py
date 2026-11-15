@@ -74,17 +74,55 @@ class DeltaExchangeLiveClient:
         return self._request("GET", "/v2/wallet/balances")
 
     def get_available_balance_usd(self):
-        """Returns the total available margin balance in USD."""
+        """Returns (available_usd, inr_equivalent, details_str)"""
         res = self.get_wallet_balances()
         if res.get("success"):
+            meta = res.get("meta", {})
+            net_equity = float(meta.get("net_equity", 0.0)) if meta.get("net_equity") else 0.0
+            
             balances = res.get("result", [])
+            inr_bal = 0.0
+            usd_bal = 0.0
+            usdt_bal = 0.0
+            
             for b in balances:
-                # Delta Exchange settles BTCUSD in USD
-                if b.get("asset_symbol") in ["USD", "USDT"]:
-                    return float(b.get("available_balance", 0.0))
-            if balances:
-                return float(balances[0].get("available_balance", 0.0))
-        return 0.0
+                sym = str(b.get("asset_symbol", "")).upper()
+                avail = float(b.get("available_balance", 0.0))
+                if sym == "INR":
+                    inr_bal += avail
+                elif sym == "USD":
+                    usd_bal += avail
+                elif sym == "USDT":
+                    usdt_bal += avail
+                    
+            if inr_bal > 0:
+                # If net_equity is roughly equal to inr_bal (within 10%), it's reported in INR
+                if net_equity > 0 and abs(net_equity - inr_bal) / inr_bal < 0.10:
+                    calc_usd = inr_bal / 84.0
+                elif net_equity > 0 and abs(net_equity - (inr_bal / 84.0)) / (inr_bal / 84.0) < 0.20:
+                    calc_usd = net_equity
+                elif usd_bal > 0 or usdt_bal > 0:
+                    calc_usd = (usd_bal + usdt_bal) + (inr_bal / 84.0)
+                else:
+                    calc_usd = inr_bal / 84.0
+            elif usd_bal > 0 or usdt_bal > 0:
+                calc_usd = usd_bal + usdt_bal
+            elif net_equity > 0:
+                calc_usd = net_equity
+            else:
+                calc_usd = 0.0
+                
+            inr_val = inr_bal if inr_bal > 0 else (calc_usd * 84.0)
+            desc = f"${calc_usd:,.2f} USD (~₹{inr_val:,.0f} INR)"
+            return calc_usd, inr_val, desc
+        else:
+            err = res.get("error", "Unknown API error")
+            if isinstance(err, dict):
+                err_msg = err.get("message") or err.get("error", {}).get("message") or json.dumps(err)
+            else:
+                err_msg = str(err)
+            print(f"[WALLET BALANCE ERROR] Delta API returned: {err_msg}", flush=True)
+            return 0.0, 0.0, f"Error: {err_msg}"
 
     def set_leverage(self, product_id=27, leverage=50.0):
         """Configures order leverage for BTCUSD (Product ID 27)."""
