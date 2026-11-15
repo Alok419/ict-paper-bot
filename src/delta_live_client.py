@@ -28,16 +28,16 @@ class DeltaExchangeLiveClient:
         if not self.api_key or not self.api_secret:
             return {"success": False, "error": "DELTA_API_KEY or DELTA_API_SECRET not configured"}
 
-        query_param_str = urllib.parse.urlencode(query_params) if query_params else ""
+        query_param_str = ("?" + urllib.parse.urlencode(query_params)) if query_params else ""
         body = ""
         if payload is not None:
             body = json.dumps(payload, separators=(',', ':'))
 
         path = endpoint
-        # Delta Exchange API pre-hash: method + timestamp + path + queryParams + body
+        # Delta Exchange API pre-hash: method + timestamp + path + query_string + body
         timestamp, signature = self._generate_signature(method, path, query_param_str, body)
 
-        url = self.base_url + path + ("?" + query_param_str if query_param_str else "")
+        url = self.base_url + path + query_param_str
         headers = {
             "api-key": self.api_key,
             "signature": signature,
@@ -127,11 +127,12 @@ class DeltaExchangeLiveClient:
         payload = {"leverage": str(int(leverage))}
         return self._request("POST", f"/v2/products/{product_id}/orders/leverage", payload=payload)
 
-    def place_market_order(self, product_id=27, size_contracts=1, side="buy"):
+    def place_market_order(self, product_id=27, size_contracts=1, side="buy", reduce_only=False):
         """
         Places a market order on Delta Exchange India.
         side: 'buy' or 'sell'
         size: integer number of contracts (1 contract = 0.001 BTC)
+        reduce_only: if True, only closes/reduces existing position
         """
         payload = {
             "product_id": int(product_id),
@@ -139,16 +140,20 @@ class DeltaExchangeLiveClient:
             "side": side.lower(),
             "order_type": "market_order"
         }
+        if reduce_only:
+            payload["reduce_only"] = True
         return self._request("POST", "/v2/orders", payload=payload)
 
     def close_position(self, product_id=27, size_contracts=1, side_to_close="buy"):
         """
-        Closes position by sending an opposing market order.
+        Closes position by sending an opposing market order with reduce_only=True.
         If currently LONG (buy), closing side is 'sell'.
         If currently SHORT (sell), closing side is 'buy'.
         """
+        if size_contracts <= 0:
+            return {"success": True, "message": "Nothing to close"}
         close_side = "sell" if side_to_close.lower() == "buy" else "buy"
-        return self.place_market_order(product_id=product_id, size_contracts=size_contracts, side=close_side)
+        return self.place_market_order(product_id=product_id, size_contracts=size_contracts, side=close_side, reduce_only=True)
 
     def get_open_positions(self, product_id=27):
         """Fetches active open positions for the product."""
@@ -157,3 +162,12 @@ class DeltaExchangeLiveClient:
             positions = res.get("result", [])
             return [p for p in positions if p.get("product_id") == product_id and int(p.get("size", 0)) != 0]
         return []
+
+    def verify_api_connection(self):
+        """Tests live API key permissions against Delta Exchange India."""
+        res = self.get_wallet_balances()
+        if not res.get("success"):
+            err = res.get("error", "Unauthorized or invalid credentials")
+            err_msg = err.get("message") if isinstance(err, dict) else str(err)
+            return False, f"Auth Error: {err_msg}"
+        return True, "API Key authenticated and operational"

@@ -271,7 +271,17 @@ class LiveICTPaperBot:
         is_active = self.is_in_session(now_ist)
         sess_badge = "🟢 ACTIVE SESSION (4:30 PM - 9:00 AM IST)" if is_active else "⏳ STANDBY (Next session: 4:30 PM IST)"
         
-        status_line = f"\n• <b>Notice:</b> <code>{self.connection_msg}</code>" if self.connection_msg else ""
+        if self.trading_mode == "REAL":
+            if self.delta_client:
+                api_ok, auth_msg = self.delta_client.verify_api_connection()
+                if api_ok:
+                    status_line = f"\n• <b>Delta Exchange API:</b> 🟢 CONNECTED & AUTHENTICATED (50x Active)"
+                else:
+                    status_line = f"\n• <b>Delta Exchange API:</b> 🔴 {auth_msg}"
+            else:
+                status_line = f"\n• <b>Delta Exchange API:</b> 🔴 {self.connection_msg or 'Awaiting API Keys in Railway Variables'}"
+        else:
+            status_line = f"\n• <b>Notice:</b> <code>{self.connection_msg}</code>" if self.connection_msg else ""
         
         msg = (
             f"🚀 <b>ICT BOT: SYSTEM ONLINE ({mode_badge})</b>\n"
@@ -365,14 +375,27 @@ class LiveICTPaperBot:
                 with open(STATE_FILE, mode="r", encoding="utf-8") as f:
                     st = json.load(f)
                     if self.trading_mode == "REAL":
-                        if "real_capital" in st and st["real_capital"]:
-                            self.capital = float(st["real_capital"])
+                        # If delta_client already synchronized live capital from exchange, preserve live balance!
+                        if not (self.delta_client and self.capital > 0 and self.capital != 100.0):
+                            if "real_capital" in st and st["real_capital"]:
+                                self.capital = float(st["real_capital"])
                     else:
                         self.capital = st.get("capital", self.initial_capital)
                     self.active_trade = st.get("active_trade", None)
                     self.daily_stats = st.get("daily_stats", {})
                     self.completed_trades = st.get("completed_trades", [])
                     self.mitigated_fvg_ids = set(st.get("mitigated_fvg_ids", []))
+                    
+                    # Verify active trade with Delta Exchange in REAL mode:
+                    if self.trading_mode == "REAL" and self.delta_client:
+                        try:
+                            live_positions = self.delta_client.get_open_positions(product_id=27)
+                            if not live_positions and self.active_trade is not None:
+                                print(f"[STATE SYNC] Delta Exchange has 0 open positions. Resetting phantom trade {self.active_trade.get('id')}.", flush=True)
+                                self.active_trade = None
+                        except Exception as e:
+                            print(f"[STATE SYNC WARNING] Could not verify live positions with Delta: {e}", flush=True)
+
                     print(f"[State Loaded] Capital: ${self.capital:,.2f} | Active Trade: {'YES' if self.active_trade else 'None'} | Mitigated FVGs: {len(self.mitigated_fvg_ids)}")
             except Exception as e:
                 print(f"Error loading state: {e}")
@@ -573,6 +596,18 @@ class LiveICTPaperBot:
                 t["exit_price"] = exit_price
                 t["exit_time"] = now_ist.strftime("%Y-%m-%d %H:%M:%S")
                 t["exit_reason"] = exit_reason
+                
+                # In REAL mode, fetch settled live balance directly from Delta Exchange India
+                if self.trading_mode == "REAL" and self.delta_client:
+                    try:
+                        time.sleep(1) # Allow 1s for exchange settlement
+                        bal_usd, bal_inr, bal_desc = self.delta_client.get_available_balance_usd()
+                        if bal_usd > 0:
+                            self.capital = bal_usd
+                            self.balance_desc = bal_desc
+                    except Exception:
+                        pass
+                
                 t["running_capital"] = self.capital
                 
                 trade_pnl_pct = t["realized_pnl"] / t["starting_balance"]
@@ -594,6 +629,7 @@ class LiveICTPaperBot:
                 self.save_state()
                 
                 pnl_sign = "+" if t["realized_pnl"] >= 0 else "-"
+                bal_display = self.balance_desc if (self.trading_mode == "REAL" and self.balance_desc) else f"${self.capital:,.2f}"
                 alert_closed = (
                     f"{'🎉' if t['realized_pnl'] > 0 else '🛑'} <b>TRADE CLOSED: #{t['id']}</b>\n"
                     f"━━━━━━━━━━━━━━━━━━━\n"
@@ -601,7 +637,7 @@ class LiveICTPaperBot:
                     f"• <b>Exit Price:</b> ${exit_price:,.1f}\n"
                     f"• <b>Exit Reason:</b> {exit_reason}\n"
                     f"• <b>Realized PnL:</b> {pnl_sign}${abs(t['realized_pnl']):.2f}\n"
-                    f"• <b>Updated Account Balance:</b> ${self.capital:,.2f}"
+                    f"• <b>Updated Account Balance:</b> {bal_display}"
                 )
                 send_telegram_alert(alert_closed)
                 print(f"\n[TRADE CLOSED] Trade #{t['id']} | Exit: ${exit_price:,.1f} | PnL: {pnl_sign}${abs(t['realized_pnl']):.2f} | Reason: {exit_reason}\n")
@@ -610,7 +646,7 @@ class LiveICTPaperBot:
         # ---------------------------------------------------------------------
         # 2. CHECK CANDLE FORMATION & SCAN FOR NEW SETUPS
         # ---------------------------------------------------------------------
-        # Only scan for entries during 4:30 PM - 11:55 PM IST
+        # Only scan for entries during 4:30 PM - 9:00 AM IST (Overnight)
         if not self.is_in_session(now_ist):
             return
             
@@ -707,26 +743,66 @@ class LiveICTPaperBot:
                         tp1_price = entry_price + (self.partial_tp_rr * risk_dist)
                         tp2_price = entry_price + (self.min_rr * risk_dist)
                         
-                        risk_usd = self.capital * self.risk_per_trade
-                        notional_usd = min(risk_usd / (risk_dist / entry_price), self.capital * self.max_leverage)
-                        
-                        # Contract sizing on Delta Exchange India (1 contract = 0.001 BTC)
+                        # Contract sizing with strict 60% margin safety cap on Delta Exchange India
                         contract_val_usd = entry_price * 0.001
-                        max_allowed_contracts = max(1, int((self.capital * self.max_leverage) / contract_val_usd))
-                        calculated_contracts = max(1, int(round(notional_usd / contract_val_usd)))
-                        num_contracts = min(calculated_contracts, max_allowed_contracts)
+                        max_margin_budget = self.capital * 0.60
+                        max_contracts_by_margin = max(1, int((max_margin_budget * self.max_leverage) / contract_val_usd))
+                        
+                        risk_usd = self.capital * self.risk_per_trade
+                        risk_pts = max(risk_dist, 20.0)
+                        contracts_by_risk = max(1, int(risk_usd / (risk_pts * 0.001)))
+                        
+                        num_contracts = min(contracts_by_risk, max_contracts_by_margin)
                         btc_size = num_contracts * 0.001
                         actual_notional = num_contracts * contract_val_usd
                         
+                        # Real Order Execution on Delta Exchange India
                         real_order_id = None
-                        if self.trading_mode == "REAL" and self.delta_client:
+                        if self.trading_mode == "REAL":
+                            if not self.delta_client:
+                                skip_msg = (
+                                    f"⚠️ <b>REAL TRADE SIGNAL SKIPPED (#{f['type']})</b>\n"
+                                    f"━━━━━━━━━━━━━━━━━━━\n"
+                                    f"• <b>Reason:</b> Delta Exchange client not connected.\n"
+                                    f"• <i>No trade placed. Simulated runner blocked.</i>"
+                                )
+                                send_telegram_alert(skip_msg)
+                                print(f"[REAL TRADE BLOCKED] Delta client is offline.", flush=True)
+                                break
+                                
                             try:
                                 order_res = self.delta_client.place_market_order(product_id=27, size_contracts=num_contracts, side="buy")
                                 print(f"[REAL ORDER PLACED] Buy #{num_contracts} contracts response: {order_res}", flush=True)
-                                if order_res.get("success"):
+                                if order_res.get("success") and order_res.get("result", {}).get("id"):
                                     real_order_id = order_res.get("result", {}).get("id")
+                                else:
+                                    err_info = order_res.get("error", "Unknown Delta API error")
+                                    err_text = err_info.get("message", str(err_info)) if isinstance(err_info, dict) else str(err_info)
+                                    reject_alert = (
+                                        f"🚨 <b>DELTA EXCHANGE REJECTED ORDER</b>\n"
+                                        f"━━━━━━━━━━━━━━━━━━━\n"
+                                        f"• <b>Action:</b> BUY {num_contracts} Contracts (BTCUSD, ~${actual_notional:.2f} notional)\n"
+                                        f"• <b>Exchange Response:</b> <code>{err_text}</code>\n"
+                                        f"• <b>Account Balance:</b> {self.balance_desc}\n"
+                                        f"• <b>Status:</b> ❌ Order aborted. Account safe. No simulated runner opened."
+                                    )
+                                    send_telegram_alert(reject_alert)
+                                    print(f"[REAL ORDER REJECTED] {err_text}", flush=True)
+                                    break # DO NOT OPEN FAKE TRADE!
                             except Exception as e:
-                                print(f"[REAL ORDER ERROR] Error sending buy order to Delta: {e}", flush=True)
+                                fail_alert = (
+                                    f"🚨 <b>DELTA EXCHANGE ORDER EXCEPTION</b>\n"
+                                    f"━━━━━━━━━━━━━━━━━━━\n"
+                                    f"• <b>Error:</b> <code>{e}</code>\n"
+                                    f"• <b>Status:</b> ❌ Order aborted. No simulated runner opened."
+                                )
+                                send_telegram_alert(fail_alert)
+                                print(f"[REAL ORDER EXCEPTION] {e}", flush=True)
+                                break # DO NOT OPEN FAKE TRADE!
+                        
+                        if self.trading_mode == "REAL" and not real_order_id:
+                            print(f"[CRITICAL ABORT] Blocked active trade creation: real_order_id is missing in REAL mode.", flush=True)
+                            break
                         
                         self.active_trade = {
                             "id": len(self.completed_trades) + 1,
@@ -757,7 +833,8 @@ class LiveICTPaperBot:
                         self.save_state()
                         
                         mode_badge = "🔥 REAL MONEY LIVE" if self.trading_mode == "REAL" else "📝 PAPER TRADING"
-                        order_id_line = f"\n• <b>Delta Order ID:</b> <code>{real_order_id}</code>" if real_order_id else ""
+                        order_id_line = f"\n• <b>Delta Order ID:</b> <code>#{real_order_id} (Verified Live)</code>" if real_order_id else ""
+                        bal_display = self.balance_desc if (self.trading_mode == "REAL" and self.balance_desc) else f"${self.capital:,.2f}"
                         entry_alert = (
                             f"🚀 <b>ICT BOT: NEW ORDER EXECUTED ({mode_badge})</b>\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
@@ -769,7 +846,7 @@ class LiveICTPaperBot:
                             f"• <b>Take Profit 2 (2.5R):</b> ${tp2_price:,.1f}\n"
                             f"• <b>Contracts:</b> {num_contracts} Contracts ({btc_size:.4f} BTC, ${actual_notional:.2f}){order_id_line}\n"
                             f"• <b>Risk:</b> ${risk_usd:.2f} ({self.risk_per_trade*100:.1f}%)\n"
-                            f"• <b>Account Balance:</b> ${self.capital:,.2f}"
+                            f"• <b>Account Balance:</b> {bal_display}"
                         )
                         send_telegram_alert(entry_alert)
                         print(f"\n[{self.trading_mode} TRADE ENTERED] LONG #{self.active_trade['id']} ({num_contracts} contracts) at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
@@ -788,26 +865,66 @@ class LiveICTPaperBot:
                         tp1_price = entry_price - (self.partial_tp_rr * risk_dist)
                         tp2_price = entry_price - (self.min_rr * risk_dist)
                         
-                        risk_usd = self.capital * self.risk_per_trade
-                        notional_usd = min(risk_usd / (risk_dist / entry_price), self.capital * self.max_leverage)
-                        
-                        # Contract sizing on Delta Exchange India (1 contract = 0.001 BTC)
+                        # Contract sizing with strict 60% margin safety cap on Delta Exchange India
                         contract_val_usd = entry_price * 0.001
-                        max_allowed_contracts = max(1, int((self.capital * self.max_leverage) / contract_val_usd))
-                        calculated_contracts = max(1, int(round(notional_usd / contract_val_usd)))
-                        num_contracts = min(calculated_contracts, max_allowed_contracts)
+                        max_margin_budget = self.capital * 0.60
+                        max_contracts_by_margin = max(1, int((max_margin_budget * self.max_leverage) / contract_val_usd))
+                        
+                        risk_usd = self.capital * self.risk_per_trade
+                        risk_pts = max(risk_dist, 20.0)
+                        contracts_by_risk = max(1, int(risk_usd / (risk_pts * 0.001)))
+                        
+                        num_contracts = min(contracts_by_risk, max_contracts_by_margin)
                         btc_size = num_contracts * 0.001
                         actual_notional = num_contracts * contract_val_usd
                         
+                        # Real Order Execution on Delta Exchange India
                         real_order_id = None
-                        if self.trading_mode == "REAL" and self.delta_client:
+                        if self.trading_mode == "REAL":
+                            if not self.delta_client:
+                                skip_msg = (
+                                    f"⚠️ <b>REAL TRADE SIGNAL SKIPPED (#{f['type']})</b>\n"
+                                    f"━━━━━━━━━━━━━━━━━━━\n"
+                                    f"• <b>Reason:</b> Delta Exchange client not connected.\n"
+                                    f"• <i>No trade placed. Simulated runner blocked.</i>"
+                                )
+                                send_telegram_alert(skip_msg)
+                                print(f"[REAL TRADE BLOCKED] Delta client is offline.", flush=True)
+                                break
+                                
                             try:
                                 order_res = self.delta_client.place_market_order(product_id=27, size_contracts=num_contracts, side="sell")
                                 print(f"[REAL ORDER PLACED] Sell #{num_contracts} contracts response: {order_res}", flush=True)
-                                if order_res.get("success"):
+                                if order_res.get("success") and order_res.get("result", {}).get("id"):
                                     real_order_id = order_res.get("result", {}).get("id")
+                                else:
+                                    err_info = order_res.get("error", "Unknown Delta API error")
+                                    err_text = err_info.get("message", str(err_info)) if isinstance(err_info, dict) else str(err_info)
+                                    reject_alert = (
+                                        f"🚨 <b>DELTA EXCHANGE REJECTED ORDER</b>\n"
+                                        f"━━━━━━━━━━━━━━━━━━━\n"
+                                        f"• <b>Action:</b> SELL {num_contracts} Contracts (BTCUSD, ~${actual_notional:.2f} notional)\n"
+                                        f"• <b>Exchange Response:</b> <code>{err_text}</code>\n"
+                                        f"• <b>Account Balance:</b> {self.balance_desc}\n"
+                                        f"• <b>Status:</b> ❌ Order aborted. Account safe. No simulated runner opened."
+                                    )
+                                    send_telegram_alert(reject_alert)
+                                    print(f"[REAL ORDER REJECTED] {err_text}", flush=True)
+                                    break # DO NOT OPEN FAKE TRADE!
                             except Exception as e:
-                                print(f"[REAL ORDER ERROR] Error sending sell order to Delta: {e}", flush=True)
+                                fail_alert = (
+                                    f"🚨 <b>DELTA EXCHANGE ORDER EXCEPTION</b>\n"
+                                    f"━━━━━━━━━━━━━━━━━━━\n"
+                                    f"• <b>Error:</b> <code>{e}</code>\n"
+                                    f"• <b>Status:</b> ❌ Order aborted. No simulated runner opened."
+                                )
+                                send_telegram_alert(fail_alert)
+                                print(f"[REAL ORDER EXCEPTION] {e}", flush=True)
+                                break # DO NOT OPEN FAKE TRADE!
+                        
+                        if self.trading_mode == "REAL" and not real_order_id:
+                            print(f"[CRITICAL ABORT] Blocked active trade creation: real_order_id is missing in REAL mode.", flush=True)
+                            break
                         
                         self.active_trade = {
                             "id": len(self.completed_trades) + 1,
@@ -838,7 +955,8 @@ class LiveICTPaperBot:
                         self.save_state()
                         
                         mode_badge = "🔥 REAL MONEY LIVE" if self.trading_mode == "REAL" else "📝 PAPER TRADING"
-                        order_id_line = f"\n• <b>Delta Order ID:</b> <code>{real_order_id}</code>" if real_order_id else ""
+                        order_id_line = f"\n• <b>Delta Order ID:</b> <code>#{real_order_id} (Verified Live)</code>" if real_order_id else ""
+                        bal_display = self.balance_desc if (self.trading_mode == "REAL" and self.balance_desc) else f"${self.capital:,.2f}"
                         entry_alert = (
                             f"🚀 <b>ICT BOT: NEW ORDER EXECUTED ({mode_badge})</b>\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
@@ -850,7 +968,7 @@ class LiveICTPaperBot:
                             f"• <b>Take Profit 2 (2.5R):</b> ${tp2_price:,.1f}\n"
                             f"• <b>Contracts:</b> {num_contracts} Contracts ({btc_size:.4f} BTC, ${actual_notional:.2f}){order_id_line}\n"
                             f"• <b>Risk:</b> ${risk_usd:.2f} ({self.risk_per_trade*100:.1f}%)\n"
-                            f"• <b>Account Balance:</b> ${self.capital:,.2f}"
+                            f"• <b>Account Balance:</b> {bal_display}"
                         )
                         send_telegram_alert(entry_alert)
                         print(f"\n[{self.trading_mode} TRADE ENTERED] SHORT #{self.active_trade['id']} ({num_contracts} contracts) at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
