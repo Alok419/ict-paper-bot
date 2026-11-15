@@ -32,35 +32,92 @@ DELTA_BASE_URL = "https://api.india.delta.exchange/v2"
 # -----------------------------------------------------------------------------
 # 1. ENVIRONMENT & TELEGRAM ALERT MODULE
 # -----------------------------------------------------------------------------
+def get_env_variable(candidates, default=""):
+    """
+    Ultra-robust environment variable resolver.
+    Handles Railway, Render, Docker, and .env files.
+    Tolerates leading/trailing spaces, mixed case, and common aliases.
+    """
+    # 1. Exact or case-insensitive match on stripped keys
+    for cand in candidates:
+        cand_clean = cand.strip().upper()
+        for k, v in os.environ.items():
+            if k.strip().upper() == cand_clean and v is not None:
+                val = str(v).strip().strip('"').strip("'").strip()
+                if val:
+                    return val
+
+    # 2. Fuzzy keyword search in os.environ
+    for cand in candidates:
+        cand_upper = cand.strip().upper()
+        if "SECRET" in cand_upper:
+            for k, v in os.environ.items():
+                ku = k.strip().upper()
+                if "DELTA" in ku and "SECRET" in ku and v is not None:
+                    val = str(v).strip().strip('"').strip("'").strip()
+                    if val:
+                        return val
+        elif "KEY" in cand_upper:
+            for k, v in os.environ.items():
+                ku = k.strip().upper()
+                if "DELTA" in ku and "KEY" in ku and "SECRET" not in ku and v is not None:
+                    val = str(v).strip().strip('"').strip("'").strip()
+                    if val:
+                        return val
+
+    # 3. Fallback to local .env file
+    if os.path.exists(ENV_FILE):
+        try:
+            with open(ENV_FILE, mode="r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        kc = k.strip().upper()
+                        for cand in candidates:
+                            if kc == cand.strip().upper():
+                                val = v.strip().strip('"').strip("'").strip()
+                                if val:
+                                    return val
+        except Exception:
+            pass
+
+    return default
+
 def load_env():
     env = {}
-    # 1. Read ALL OS Environment Variables (Cloud Platforms: Railway, Render, Docker)
     for k, v in os.environ.items():
-        if v:
-            env[k] = str(v).strip().strip('"').strip("'")
+        if v is not None:
+            clean_k = str(k).strip()
+            clean_v = str(v).strip().strip('"').strip("'").strip()
+            env[clean_k] = clean_v
+            env[clean_k.upper()] = clean_v
             
-    # 2. Fallback to local .env file
     if os.path.exists(ENV_FILE):
-        with open(ENV_FILE, mode="r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith("#") and "=" in line:
-                    k, v = line.split("=", 1)
-                    k_clean = k.strip()
-                    if k_clean not in env:
-                        env[k_clean] = v.strip().strip('"').strip("'")
+        try:
+            with open(ENV_FILE, mode="r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        k, v = line.split("=", 1)
+                        clean_k = k.strip()
+                        clean_v = v.strip().strip('"').strip("'").strip()
+                        if clean_k not in env:
+                            env[clean_k] = clean_v
+                            env[clean_k.upper()] = clean_v
+        except Exception:
+            pass
     return env
 
 ENV_VARS = load_env()
-TELEGRAM_BOT_TOKEN = ENV_VARS.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = ENV_VARS.get("TELEGRAM_CHAT_ID", "")
+TELEGRAM_BOT_TOKEN = get_env_variable(["TELEGRAM_BOT_TOKEN", "BOT_TOKEN", "TELEGRAM_TOKEN"])
+TELEGRAM_CHAT_ID = get_env_variable(["TELEGRAM_CHAT_ID", "CHAT_ID"])
 
 def send_telegram_alert(message_html):
-    env_vars = load_env()
-    token = env_vars.get("TELEGRAM_BOT_TOKEN", "")
-    chat_id = env_vars.get("TELEGRAM_CHAT_ID", "")
+    token = get_env_variable(["TELEGRAM_BOT_TOKEN", "BOT_TOKEN", "TELEGRAM_TOKEN"])
+    chat_id = get_env_variable(["TELEGRAM_CHAT_ID", "CHAT_ID"])
     if not token or not chat_id:
-        print("[Telegram Alert Disabled: Token or Chat ID not configured in .env]", flush=True)
+        print("[Telegram Alert Disabled: Token or Chat ID not configured]", flush=True)
         return False
         
     url = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -124,16 +181,28 @@ class LiveICTPaperBot:
     def __init__(self, initial_capital=100.0, max_leverage=50.0,
                  risk_per_trade=0.10, daily_loss_limit=0.20, max_trades_daily=3,
                  min_rr=2.5, partial_tp_rr=1.5, partial_tp_pct=0.5):
-        # Configurable via Environment Variables
-        env = load_env()
-        self.trading_mode = env.get("TRADING_MODE", os.environ.get("TRADING_MODE", "PAPER")).upper()
-        self.max_leverage = float(env.get("MAX_LEVERAGE", os.environ.get("MAX_LEVERAGE", max_leverage)))
-        self.risk_per_trade = float(env.get("RISK_PER_TRADE", os.environ.get("RISK_PER_TRADE", risk_per_trade)))
-        self.daily_loss_limit = float(env.get("DAILY_LOSS_LIMIT", os.environ.get("DAILY_LOSS_LIMIT", daily_loss_limit)))
-        self.max_trades_daily = int(env.get("MAX_TRADES_DAILY", os.environ.get("MAX_TRADES_DAILY", max_trades_daily)))
+        # Resolve Environment Variables
+        explicit_mode = get_env_variable(["TRADING_MODE", "MODE", "TRADINGMODE"], "").upper()
+        api_k = get_env_variable(["DELTA_API_KEY", "DELTA_KEY", "API_KEY", "DELTA_EXCHANGE_API_KEY"])
+        api_s = get_env_variable(["DELTA_API_SECRET", "DELTA_SECRET", "API_SECRET", "DELTA_EXCHANGE_API_SECRET"])
         
-        self.initial_capital = initial_capital
-        self.capital = initial_capital
+        self.max_leverage = float(get_env_variable(["MAX_LEVERAGE", "LEVERAGE"], str(max_leverage)))
+        self.risk_per_trade = float(get_env_variable(["RISK_PER_TRADE", "RISK"], str(risk_per_trade)))
+        self.daily_loss_limit = float(get_env_variable(["DAILY_LOSS_LIMIT", "DAILY_LOSS"], str(daily_loss_limit)))
+        self.max_trades_daily = int(get_env_variable(["MAX_TRADES_DAILY", "MAX_TRADES"], str(max_trades_daily)))
+        
+        # Real Mode Activation: If TRADING_MODE=REAL in Railway, or if API keys are present
+        if explicit_mode == "REAL" or (api_k and api_s and explicit_mode != "PAPER"):
+            self.trading_mode = "REAL"
+            self.initial_capital = 11.90 # Standard ₹1,000 INR baseline
+            self.capital = 11.90
+            self.balance_desc = "$11.90 USD (~₹1,000 INR)"
+        else:
+            self.trading_mode = "PAPER"
+            self.initial_capital = initial_capital
+            self.capital = initial_capital
+            self.balance_desc = f"${initial_capital:,.2f}"
+            
         self.min_rr = min_rr
         self.partial_tp_rr = partial_tp_rr
         self.partial_tp_pct = partial_tp_pct
@@ -151,32 +220,23 @@ class LiveICTPaperBot:
         # Real Trading Client Initialization
         self.delta_client = None
         self.connection_msg = ""
-        self.balance_desc = ""
         
-        api_k = env.get("DELTA_API_KEY", os.environ.get("DELTA_API_KEY", "")).strip().strip('"').strip("'")
-        api_s = env.get("DELTA_API_SECRET", os.environ.get("DELTA_API_SECRET", "")).strip().strip('"').strip("'")
-        explicit_mode = env.get("TRADING_MODE", os.environ.get("TRADING_MODE", "")).strip().strip('"').strip("'").upper()
-        
-        # Auto-activate REAL mode if API keys are present or TRADING_MODE is REAL
-        if explicit_mode == "REAL" or (api_k and api_s and explicit_mode != "PAPER"):
-            self.trading_mode = "REAL"
-        else:
-            self.trading_mode = "PAPER"
-            
         if self.trading_mode == "REAL":
             if api_k and api_s:
                 self.delta_client = DeltaExchangeLiveClient(api_key=api_k, api_secret=api_s)
                 print(f"[REAL TRADING] DeltaExchangeLiveClient initialized with {self.max_leverage}x leverage cap.", flush=True)
                 try:
                     bal_usd, bal_inr, bal_desc = self.delta_client.get_available_balance_usd()
-                    self.balance_desc = bal_desc
                     if bal_usd > 0:
                         self.capital = bal_usd
                         self.initial_capital = bal_usd
-                        self.connection_msg = f"Connected. Live Balance: {bal_desc}"
+                        self.balance_desc = bal_desc
+                        self.connection_msg = f"Connected: {bal_desc}"
                         print(f"[REAL TRADING] Live Delta wallet balance synchronized: {bal_desc}", flush=True)
                     else:
-                        self.connection_msg = f"Handshake response: {bal_desc}"
+                        self.connection_msg = f"Delta Handshake: {bal_desc}"
+                        if bal_desc and not bal_desc.startswith("Error"):
+                            self.balance_desc = bal_desc
                         print(f"[REAL TRADING NOTICE] Balance returned: {bal_desc}", flush=True)
                     # Configure leverage on Delta Exchange for BTCUSD
                     self.delta_client.set_leverage(product_id=27, leverage=self.max_leverage)
@@ -184,9 +244,9 @@ class LiveICTPaperBot:
                     self.connection_msg = f"Error querying balance: {e}"
                     print(f"[REAL TRADING WARNING] Error fetching initial live balance: {e}", flush=True)
             else:
-                self.connection_msg = "DELTA_API_KEY or DELTA_API_SECRET missing in environment. Falling back to Paper Mode."
+                vis_keys = [k for k in os.environ.keys() if not k.startswith("_")]
+                self.connection_msg = f"API Keys not detected! (Container env keys: {vis_keys})"
                 print(f"[REAL TRADING WARNING] {self.connection_msg}", flush=True)
-                self.trading_mode = "PAPER"
         
         self.load_state()
         self.save_state()
@@ -199,7 +259,7 @@ class LiveICTPaperBot:
                 if bal_usd > 0:
                     self.capital = bal_usd
                     self.balance_desc = bal_desc
-                else:
+                elif bal_desc:
                     self.balance_desc = bal_desc
             except Exception as e:
                 self.balance_desc = f"Error: {e}"
@@ -212,12 +272,15 @@ class LiveICTPaperBot:
         is_active = self.is_in_session(now_ist)
         sess_badge = "🟢 ACTIVE SESSION (4:30 PM - 9:00 AM IST)" if is_active else "⏳ STANDBY (Next session: 4:30 PM IST)"
         
-        status_line = f"\n• <b>Connection:</b> <code>{self.connection_msg}</code>" if (self.trading_mode == "REAL" and self.connection_msg) else ""
+        status_line = f"\n• <b>Notice:</b> <code>{self.connection_msg}</code>" if self.connection_msg else ""
         
         msg = (
             f"🚀 <b>ICT BOT: SYSTEM ONLINE ({mode_badge})</b>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"• <b>Session Status:</b> {sess_badge}\n"
+            f"• <b>Trading Mode:</b> {mode_badge}\n"
+            f"• <b>Live Wallet Balance:</b> {bal_text}\n"
+            f"• <b>Active Hours:</b> 4:30 PM to 9:00 AM IST (Overnight){status_line}\n"
             f"• <b>Trading Mode:</b> {mode_badge}\n"
             f"• <b>Live Wallet Balance:</b> {bal_text}\n"
             f"• <b>Active Hours:</b> 4:30 PM to 9:00 AM IST (Overnight){status_line}\n"
@@ -305,7 +368,10 @@ class LiveICTPaperBot:
             try:
                 with open(STATE_FILE, mode="r", encoding="utf-8") as f:
                     st = json.load(f)
-                    if self.trading_mode != "REAL" or self.capital == self.initial_capital:
+                    if self.trading_mode == "REAL":
+                        if "real_capital" in st and st["real_capital"]:
+                            self.capital = float(st["real_capital"])
+                    else:
                         self.capital = st.get("capital", self.initial_capital)
                     self.active_trade = st.get("active_trade", None)
                     self.daily_stats = st.get("daily_stats", {})
@@ -318,6 +384,8 @@ class LiveICTPaperBot:
     def save_state(self):
         st = {
             "capital": self.capital,
+            "real_capital": self.capital if self.trading_mode == "REAL" else None,
+            "trading_mode": self.trading_mode,
             "active_trade": self.active_trade,
             "daily_stats": self.daily_stats,
             "completed_trades": self.completed_trades,
@@ -357,6 +425,24 @@ class LiveICTPaperBot:
                 "trades": 0, "pnl_usd": 0.0, "pnl_pct": 0.0, "locked": False
             }
         day_tracker = self.daily_stats[today_str]
+
+        # Auto-connect Delta Client dynamically if in REAL mode and keys become available
+        if self.trading_mode == "REAL" and self.delta_client is None:
+            api_k = get_env_variable(["DELTA_API_KEY", "DELTA_KEY", "API_KEY", "DELTA_EXCHANGE_API_KEY"])
+            api_s = get_env_variable(["DELTA_API_SECRET", "DELTA_SECRET", "API_SECRET", "DELTA_EXCHANGE_API_SECRET"])
+            if api_k and api_s:
+                try:
+                    self.delta_client = DeltaExchangeLiveClient(api_key=api_k, api_secret=api_s)
+                    bal_usd, bal_inr, bal_desc = self.delta_client.get_available_balance_usd()
+                    if bal_usd > 0:
+                        self.capital = bal_usd
+                        self.initial_capital = bal_usd
+                        self.balance_desc = bal_desc
+                        self.connection_msg = f"Connected: {bal_desc}"
+                        self.delta_client.set_leverage(product_id=27, leverage=self.max_leverage)
+                        send_telegram_alert(f"🚀 <b>ICT BOT: DELTA EXCHANGE CONNECTED!</b>\n• Live Balance: {bal_desc}")
+                except Exception as e:
+                    pass
 
         # 1. Fetch live ticker for immediate active trade management
         ticker = fetch_live_ticker("BTCUSD")

@@ -28,18 +28,16 @@ class DeltaExchangeLiveClient:
         if not self.api_key or not self.api_secret:
             return {"success": False, "error": "DELTA_API_KEY or DELTA_API_SECRET not configured"}
 
-        query_string = ""
-        if query_params:
-            query_string = "?" + urllib.parse.urlencode(query_params)
-            
+        query_param_str = urllib.parse.urlencode(query_params) if query_params else ""
         body = ""
         if payload is not None:
             body = json.dumps(payload, separators=(',', ':'))
 
         path = endpoint
-        timestamp, signature = self._generate_signature(method, path, query_string, body)
+        # Delta Exchange API pre-hash: method + timestamp + path + queryParams + body
+        timestamp, signature = self._generate_signature(method, path, query_param_str, body)
 
-        url = self.base_url + path + query_string
+        url = self.base_url + path + ("?" + query_param_str if query_param_str else "")
         headers = {
             "api-key": self.api_key,
             "signature": signature,
