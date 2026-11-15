@@ -280,7 +280,14 @@ class LiveICTPaperBot:
                 else:
                     status_line = f"\n• <b>Delta Exchange API:</b> 🔴 {auth_msg}"
             else:
-                status_line = f"\n• <b>Delta Exchange API:</b> 🔴 {self.connection_msg or 'Awaiting API Keys in Railway Variables'}"
+                k_present = bool(get_env_variable(["DELTA_API_KEY", "DELTA_KEY", "API_KEY", "DELTA_EXCHANGE_API_KEY"]))
+                s_present = bool(get_env_variable(["DELTA_API_SECRET", "DELTA_SECRET", "API_SECRET", "DELTA_EXCHANGE_API_SECRET"]))
+                status_line = (
+                    f"\n• <b>Delta Exchange API:</b> 🔴 OFFLINE\n"
+                    f"   - <code>DELTA_API_KEY</code>: {'✅ Found' if k_present else '❌ MISSING'}\n"
+                    f"   - <code>DELTA_API_SECRET</code>: {'✅ Found' if s_present else '❌ MISSING'}\n"
+                    f"   - <i>Action: In Railway Service Variables, click 'Deploy' or 'Apply Changes' at the bottom!</i>"
+                )
         else:
             status_line = f"\n• <b>Notice:</b> <code>{self.connection_msg}</code>" if self.connection_msg else ""
         
@@ -762,14 +769,24 @@ class LiveICTPaperBot:
                         real_order_id = None
                         if self.trading_mode == "REAL":
                             if not self.delta_client:
+                                f["active"] = False
+                                self.mitigated_fvg_ids.add(f["id"])
+                                self.save_state()
+                                
+                                k_found = bool(get_env_variable(["DELTA_API_KEY", "DELTA_KEY", "API_KEY", "DELTA_EXCHANGE_API_KEY"]))
+                                s_found = bool(get_env_variable(["DELTA_API_SECRET", "DELTA_SECRET", "API_SECRET", "DELTA_EXCHANGE_API_SECRET"]))
+                                
                                 skip_msg = (
                                     f"⚠️ <b>REAL TRADE SIGNAL SKIPPED (#{f['type']})</b>\n"
                                     f"━━━━━━━━━━━━━━━━━━━\n"
-                                    f"• <b>Reason:</b> Delta Exchange client not connected.\n"
-                                    f"• <i>No trade placed. Simulated runner blocked.</i>"
+                                    f"• <b>Reason:</b> Delta Exchange client offline (Missing API Keys)\n"
+                                    f"• <b>API Key Present:</b> {'✅ Yes' if k_found else '❌ No (Missing)'}\n"
+                                    f"• <b>API Secret Present:</b> {'✅ Yes' if s_found else '❌ No (Missing)'}\n"
+                                    f"• <b>Action Required:</b> In Railway -> Service 'worker' -> Variables tab, ensure <code>DELTA_API_KEY</code> and <code>DELTA_API_SECRET</code> are entered and click <b>Deploy / Apply Changes</b>.\n"
+                                    f"• <i>Setup discarded. No trade placed.</i>"
                                 )
                                 send_telegram_alert(skip_msg)
-                                print(f"[REAL TRADE BLOCKED] Delta client is offline.", flush=True)
+                                print(f"[REAL TRADE BLOCKED] Delta client is offline. Discarded setup {f['id']}.", flush=True)
                                 break
                                 
                             try:
@@ -778,6 +795,9 @@ class LiveICTPaperBot:
                                 if order_res.get("success") and order_res.get("result", {}).get("id"):
                                     real_order_id = order_res.get("result", {}).get("id")
                                 else:
+                                    f["active"] = False
+                                    self.mitigated_fvg_ids.add(f["id"])
+                                    self.save_state()
                                     err_info = order_res.get("error", "Unknown Delta API error")
                                     err_text = err_info.get("message", str(err_info)) if isinstance(err_info, dict) else str(err_info)
                                     reject_alert = (
@@ -792,6 +812,9 @@ class LiveICTPaperBot:
                                     print(f"[REAL ORDER REJECTED] {err_text}", flush=True)
                                     break # DO NOT OPEN FAKE TRADE!
                             except Exception as e:
+                                f["active"] = False
+                                self.mitigated_fvg_ids.add(f["id"])
+                                self.save_state()
                                 fail_alert = (
                                     f"🚨 <b>DELTA EXCHANGE ORDER EXCEPTION</b>\n"
                                     f"━━━━━━━━━━━━━━━━━━━\n"
@@ -884,14 +907,24 @@ class LiveICTPaperBot:
                         real_order_id = None
                         if self.trading_mode == "REAL":
                             if not self.delta_client:
+                                f["active"] = False
+                                self.mitigated_fvg_ids.add(f["id"])
+                                self.save_state()
+                                
+                                k_found = bool(get_env_variable(["DELTA_API_KEY", "DELTA_KEY", "API_KEY", "DELTA_EXCHANGE_API_KEY"]))
+                                s_found = bool(get_env_variable(["DELTA_API_SECRET", "DELTA_SECRET", "API_SECRET", "DELTA_EXCHANGE_API_SECRET"]))
+                                
                                 skip_msg = (
                                     f"⚠️ <b>REAL TRADE SIGNAL SKIPPED (#{f['type']})</b>\n"
                                     f"━━━━━━━━━━━━━━━━━━━\n"
-                                    f"• <b>Reason:</b> Delta Exchange client not connected.\n"
-                                    f"• <i>No trade placed. Simulated runner blocked.</i>"
+                                    f"• <b>Reason:</b> Delta Exchange client offline (Missing API Keys)\n"
+                                    f"• <b>API Key Present:</b> {'✅ Yes' if k_found else '❌ No (Missing)'}\n"
+                                    f"• <b>API Secret Present:</b> {'✅ Yes' if s_found else '❌ No (Missing)'}\n"
+                                    f"• <b>Action Required:</b> In Railway -> Service 'worker' -> Variables tab, ensure <code>DELTA_API_KEY</code> and <code>DELTA_API_SECRET</code> are entered and click <b>Deploy / Apply Changes</b>.\n"
+                                    f"• <i>Setup discarded. No trade placed.</i>"
                                 )
                                 send_telegram_alert(skip_msg)
-                                print(f"[REAL TRADE BLOCKED] Delta client is offline.", flush=True)
+                                print(f"[REAL TRADE BLOCKED] Delta client is offline. Discarded setup {f['id']}.", flush=True)
                                 break
                                 
                             try:
@@ -900,6 +933,9 @@ class LiveICTPaperBot:
                                 if order_res.get("success") and order_res.get("result", {}).get("id"):
                                     real_order_id = order_res.get("result", {}).get("id")
                                 else:
+                                    f["active"] = False
+                                    self.mitigated_fvg_ids.add(f["id"])
+                                    self.save_state()
                                     err_info = order_res.get("error", "Unknown Delta API error")
                                     err_text = err_info.get("message", str(err_info)) if isinstance(err_info, dict) else str(err_info)
                                     reject_alert = (
@@ -914,6 +950,9 @@ class LiveICTPaperBot:
                                     print(f"[REAL ORDER REJECTED] {err_text}", flush=True)
                                     break # DO NOT OPEN FAKE TRADE!
                             except Exception as e:
+                                f["active"] = False
+                                self.mitigated_fvg_ids.add(f["id"])
+                                self.save_state()
                                 fail_alert = (
                                     f"🚨 <b>DELTA EXCHANGE ORDER EXCEPTION</b>\n"
                                     f"━━━━━━━━━━━━━━━━━━━\n"
