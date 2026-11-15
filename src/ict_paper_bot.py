@@ -20,6 +20,11 @@ STATE_FILE = os.path.join(DATA_DIR, "live_paper_state.json")
 LOG_FILE = os.path.join(DATA_DIR, "live_trade_log.csv")
 ENV_FILE = os.path.join(PROJECT_DIR, ".env")
 
+if SRC_DIR not in sys.path:
+    sys.path.append(SRC_DIR)
+
+from delta_live_client import DeltaExchangeLiveClient
+
 os.makedirs(DATA_DIR, exist_ok=True)
 
 DELTA_BASE_URL = "https://api.india.delta.exchange/v2"
@@ -116,15 +121,19 @@ def fetch_live_ticker(symbol="BTCUSD"):
 # 3. LIVE PAPER TRADING ENGINE
 # -----------------------------------------------------------------------------
 class LiveICTPaperBot:
-    def __init__(self, initial_capital=100.0, max_leverage=20.0,
-                 risk_per_trade=0.04, daily_loss_limit=0.08, max_trades_daily=3,
+    def __init__(self, initial_capital=100.0, max_leverage=50.0,
+                 risk_per_trade=0.10, daily_loss_limit=0.20, max_trades_daily=3,
                  min_rr=2.5, partial_tp_rr=1.5, partial_tp_pct=0.5):
+        # Configurable via Environment Variables
+        env = load_env()
+        self.trading_mode = env.get("TRADING_MODE", os.environ.get("TRADING_MODE", "PAPER")).upper()
+        self.max_leverage = float(env.get("MAX_LEVERAGE", os.environ.get("MAX_LEVERAGE", max_leverage)))
+        self.risk_per_trade = float(env.get("RISK_PER_TRADE", os.environ.get("RISK_PER_TRADE", risk_per_trade)))
+        self.daily_loss_limit = float(env.get("DAILY_LOSS_LIMIT", os.environ.get("DAILY_LOSS_LIMIT", daily_loss_limit)))
+        self.max_trades_daily = int(env.get("MAX_TRADES_DAILY", os.environ.get("MAX_TRADES_DAILY", max_trades_daily)))
+        
         self.initial_capital = initial_capital
         self.capital = initial_capital
-        self.max_leverage = max_leverage
-        self.risk_per_trade = risk_per_trade
-        self.daily_loss_limit = daily_loss_limit
-        self.max_trades_daily = max_trades_daily
         self.min_rr = min_rr
         self.partial_tp_rr = partial_tp_rr
         self.partial_tp_pct = partial_tp_pct
@@ -138,6 +147,28 @@ class LiveICTPaperBot:
         self.session_notified = False
         self.daily_summary_sent = False
         self.last_hourly_alert_hour = -1
+        
+        # Real Trading Client Initialization
+        self.delta_client = None
+        if self.trading_mode == "REAL":
+            api_k = env.get("DELTA_API_KEY", os.environ.get("DELTA_API_KEY", ""))
+            api_s = env.get("DELTA_API_SECRET", os.environ.get("DELTA_API_SECRET", ""))
+            if api_k and api_s:
+                self.delta_client = DeltaExchangeLiveClient(api_key=api_k, api_secret=api_s)
+                print(f"[REAL TRADING] DeltaExchangeLiveClient initialized with {self.max_leverage}x leverage cap.", flush=True)
+                try:
+                    live_bal = self.delta_client.get_available_balance_usd()
+                    if live_bal > 0:
+                        self.capital = live_bal
+                        self.initial_capital = live_bal
+                        print(f"[REAL TRADING] Live Delta wallet balance synchronized: ${self.capital:,.2f}", flush=True)
+                    # Configure leverage on Delta Exchange for BTCUSD
+                    self.delta_client.set_leverage(product_id=27, leverage=self.max_leverage)
+                except Exception as e:
+                    print(f"[REAL TRADING WARNING] Error fetching initial live balance: {e}", flush=True)
+            else:
+                print("[REAL TRADING WARNING] DELTA_API_KEY or DELTA_API_SECRET missing in environment. Falling back to Paper Mode.", flush=True)
+                self.trading_mode = "PAPER"
         
         self.load_state()
         self.save_state()
@@ -278,6 +309,18 @@ class LiveICTPaperBot:
                     t["size"] *= (1.0 - self.partial_tp_pct)
                     t["sl"] = t["entry"] # Move to breakeven
                     t["be_activated"] = True
+                    
+                    # Close 50% contracts on Delta Exchange India if real trading
+                    if self.trading_mode == "REAL" and self.delta_client:
+                        try:
+                            c_to_close = max(1, t.get("contracts", 1) // 2) if t.get("contracts", 1) >= 2 else 0
+                            if c_to_close > 0:
+                                self.delta_client.close_position(product_id=27, size_contracts=c_to_close, side_to_close="buy")
+                                t["contracts"] -= c_to_close
+                                print(f"[REAL ORDER CLOSED] TP1 closed {c_to_close} contracts. Remaining: {t['contracts']}", flush=True)
+                        except Exception as e:
+                            print(f"[REAL ORDER ERROR] Error closing TP1 on Delta: {e}", flush=True)
+                            
                     self.save_state()
                     
                     alert_msg = (
@@ -314,6 +357,18 @@ class LiveICTPaperBot:
                     t["size"] *= (1.0 - self.partial_tp_pct)
                     t["sl"] = t["entry"]
                     t["be_activated"] = True
+                    
+                    # Close 50% contracts on Delta Exchange India if real trading
+                    if self.trading_mode == "REAL" and self.delta_client:
+                        try:
+                            c_to_close = max(1, t.get("contracts", 1) // 2) if t.get("contracts", 1) >= 2 else 0
+                            if c_to_close > 0:
+                                self.delta_client.close_position(product_id=27, size_contracts=c_to_close, side_to_close="sell")
+                                t["contracts"] -= c_to_close
+                                print(f"[REAL ORDER CLOSED] TP1 closed {c_to_close} contracts. Remaining: {t['contracts']}", flush=True)
+                        except Exception as e:
+                            print(f"[REAL ORDER ERROR] Error closing TP1 on Delta: {e}", flush=True)
+                            
                     self.save_state()
                     
                     alert_msg = (
@@ -335,6 +390,17 @@ class LiveICTPaperBot:
                     trade_closed = True
 
             if trade_closed:
+                # Close remaining contracts on Delta Exchange India if real trading
+                if self.trading_mode == "REAL" and self.delta_client:
+                    try:
+                        rem_contracts = t.get("contracts", 0)
+                        if rem_contracts > 0:
+                            self.delta_client.close_position(product_id=27, size_contracts=rem_contracts, side_to_close=t["side"])
+                            print(f"[REAL ORDER CLOSED] Closed remaining {rem_contracts} contracts on Delta. Reason: {exit_reason}", flush=True)
+                            t["contracts"] = 0
+                    except Exception as e:
+                        print(f"[REAL ORDER ERROR] Error closing final position on Delta: {e}", flush=True)
+
                 remaining_gain = t["size"] * (exit_price - t["entry"]) if is_long else t["size"] * (t["entry"] - exit_price)
                 self.capital += remaining_gain
                 t["realized_pnl"] += remaining_gain
@@ -477,13 +543,31 @@ class LiveICTPaperBot:
                         
                         risk_usd = self.capital * self.risk_per_trade
                         notional_usd = min(risk_usd / (risk_dist / entry_price), self.capital * self.max_leverage)
-                        btc_size = notional_usd / entry_price
+                        
+                        # Contract sizing on Delta Exchange India (1 contract = 0.001 BTC)
+                        contract_val_usd = entry_price * 0.001
+                        num_contracts = max(1, int(round(notional_usd / contract_val_usd)))
+                        btc_size = num_contracts * 0.001
+                        actual_notional = num_contracts * contract_val_usd
+                        
+                        real_order_id = None
+                        if self.trading_mode == "REAL" and self.delta_client:
+                            try:
+                                order_res = self.delta_client.place_market_order(product_id=27, size_contracts=num_contracts, side="buy")
+                                print(f"[REAL ORDER PLACED] Buy #{num_contracts} contracts response: {order_res}", flush=True)
+                                if order_res.get("success"):
+                                    real_order_id = order_res.get("result", {}).get("id")
+                            except Exception as e:
+                                print(f"[REAL ORDER ERROR] Error sending buy order to Delta: {e}", flush=True)
                         
                         self.active_trade = {
                             "id": len(self.completed_trades) + 1,
                             "date_str": today_str,
                             "side": "BUY",
                             "model": f["type"],
+                            "trading_mode": self.trading_mode,
+                            "real_order_id": real_order_id,
+                            "contracts": num_contracts,
                             "entry_time": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
                             "entry": entry_price,
                             "sl": sl_price,
@@ -491,8 +575,8 @@ class LiveICTPaperBot:
                             "tp2": tp2_price,
                             "risk_dist": risk_dist,
                             "size": btc_size,
-                            "notional": notional_usd,
-                            "leverage": notional_usd / self.capital,
+                            "notional": actual_notional,
+                            "leverage": actual_notional / self.capital if self.capital > 0 else self.max_leverage,
                             "starting_balance": self.capital,
                             "risk_usd": risk_usd,
                             "tp1_hit": False,
@@ -504,8 +588,10 @@ class LiveICTPaperBot:
                         self.mitigated_fvg_ids.add(f["id"])
                         self.save_state()
                         
+                        mode_badge = "🔥 REAL MONEY LIVE" if self.trading_mode == "REAL" else "📝 PAPER TRADING"
+                        order_id_line = f"\n• <b>Delta Order ID:</b> <code>{real_order_id}</code>" if real_order_id else ""
                         entry_alert = (
-                            f"🚀 <b>ICT BOT: NEW LIVE TRADE ENTERED (MSS CONFIRMED)</b>\n"
+                            f"🚀 <b>ICT BOT: NEW ORDER EXECUTED ({mode_badge})</b>\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
                             f"• <b>Trade #{self.active_trade['id']}</b> | <b>Side:</b> LONG 🟢\n"
                             f"• <b>Setup Model:</b> {f['type']} (MSS Confirmed)\n"
@@ -513,12 +599,12 @@ class LiveICTPaperBot:
                             f"• <b>Stop Loss:</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
                             f"• <b>Take Profit 1 (1.5R):</b> ${tp1_price:,.1f} (50% exit + BE)\n"
                             f"• <b>Take Profit 2 (2.5R):</b> ${tp2_price:,.1f}\n"
-                            f"• <b>Position Size:</b> {btc_size:.6f} BTC (${notional_usd:.2f})\n"
-                            f"• <b>Risk:</b> ${risk_usd:.2f} (4.0%)\n"
+                            f"• <b>Contracts:</b> {num_contracts} Contracts ({btc_size:.4f} BTC, ${actual_notional:.2f}){order_id_line}\n"
+                            f"• <b>Risk:</b> ${risk_usd:.2f} ({self.risk_per_trade*100:.1f}%)\n"
                             f"• <b>Account Balance:</b> ${self.capital:,.2f}"
                         )
                         send_telegram_alert(entry_alert)
-                        print(f"\n[LIVE TRADE ENTERED] LONG #{self.active_trade['id']} at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
+                        print(f"\n[{self.trading_mode} TRADE ENTERED] LONG #{self.active_trade['id']} ({num_contracts} contracts) at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
                         break
 
             # Model 1 & 2: Bearish Setup (FVG or iFVG)
@@ -536,13 +622,31 @@ class LiveICTPaperBot:
                         
                         risk_usd = self.capital * self.risk_per_trade
                         notional_usd = min(risk_usd / (risk_dist / entry_price), self.capital * self.max_leverage)
-                        btc_size = notional_usd / entry_price
+                        
+                        # Contract sizing on Delta Exchange India (1 contract = 0.001 BTC)
+                        contract_val_usd = entry_price * 0.001
+                        num_contracts = max(1, int(round(notional_usd / contract_val_usd)))
+                        btc_size = num_contracts * 0.001
+                        actual_notional = num_contracts * contract_val_usd
+                        
+                        real_order_id = None
+                        if self.trading_mode == "REAL" and self.delta_client:
+                            try:
+                                order_res = self.delta_client.place_market_order(product_id=27, size_contracts=num_contracts, side="sell")
+                                print(f"[REAL ORDER PLACED] Sell #{num_contracts} contracts response: {order_res}", flush=True)
+                                if order_res.get("success"):
+                                    real_order_id = order_res.get("result", {}).get("id")
+                            except Exception as e:
+                                print(f"[REAL ORDER ERROR] Error sending sell order to Delta: {e}", flush=True)
                         
                         self.active_trade = {
                             "id": len(self.completed_trades) + 1,
                             "date_str": today_str,
                             "side": "SELL",
                             "model": f["type"],
+                            "trading_mode": self.trading_mode,
+                            "real_order_id": real_order_id,
+                            "contracts": num_contracts,
                             "entry_time": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
                             "entry": entry_price,
                             "sl": sl_price,
@@ -550,8 +654,8 @@ class LiveICTPaperBot:
                             "tp2": tp2_price,
                             "risk_dist": risk_dist,
                             "size": btc_size,
-                            "notional": notional_usd,
-                            "leverage": notional_usd / self.capital,
+                            "notional": actual_notional,
+                            "leverage": actual_notional / self.capital if self.capital > 0 else self.max_leverage,
                             "starting_balance": self.capital,
                             "risk_usd": risk_usd,
                             "tp1_hit": False,
@@ -563,8 +667,10 @@ class LiveICTPaperBot:
                         self.mitigated_fvg_ids.add(f["id"])
                         self.save_state()
                         
+                        mode_badge = "🔥 REAL MONEY LIVE" if self.trading_mode == "REAL" else "📝 PAPER TRADING"
+                        order_id_line = f"\n• <b>Delta Order ID:</b> <code>{real_order_id}</code>" if real_order_id else ""
                         entry_alert = (
-                            f"🚀 <b>ICT BOT: NEW LIVE TRADE ENTERED (MSS CONFIRMED)</b>\n"
+                            f"🚀 <b>ICT BOT: NEW ORDER EXECUTED ({mode_badge})</b>\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
                             f"• <b>Trade #{self.active_trade['id']}</b> | <b>Side:</b> SHORT 🔴\n"
                             f"• <b>Setup Model:</b> {f['type']} (MSS Confirmed)\n"
@@ -572,12 +678,12 @@ class LiveICTPaperBot:
                             f"• <b>Stop Loss:</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
                             f"• <b>Take Profit 1 (1.5R):</b> ${tp1_price:,.1f} (50% exit + BE)\n"
                             f"• <b>Take Profit 2 (2.5R):</b> ${tp2_price:,.1f}\n"
-                            f"• <b>Position Size:</b> {btc_size:.6f} BTC (${notional_usd:.2f})\n"
-                            f"• <b>Risk:</b> ${risk_usd:.2f} (4.0%)\n"
+                            f"• <b>Contracts:</b> {num_contracts} Contracts ({btc_size:.4f} BTC, ${actual_notional:.2f}){order_id_line}\n"
+                            f"• <b>Risk:</b> ${risk_usd:.2f} ({self.risk_per_trade*100:.1f}%)\n"
                             f"• <b>Account Balance:</b> ${self.capital:,.2f}"
                         )
                         send_telegram_alert(entry_alert)
-                        print(f"\n[LIVE TRADE ENTERED] SHORT #{self.active_trade['id']} at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
+                        print(f"\n[{self.trading_mode} TRADE ENTERED] SHORT #{self.active_trade['id']} ({num_contracts} contracts) at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
                         break
 
 # -----------------------------------------------------------------------------
