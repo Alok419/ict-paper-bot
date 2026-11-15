@@ -761,10 +761,19 @@ class LiveICTPaperBot:
                         tp1_price = entry_price + (self.partial_tp_rr * risk_dist)
                         tp2_price = entry_price + (self.min_rr * risk_dist)
                         
-                        # Contract sizing: Always utilize the 80% margin budget (leaving 20% free cushion)
+                        # Contract sizing: Use 80% of total amount in trade, reserving ~20% for fees & cushion
                         contract_val_usd = entry_price * 0.001
                         max_margin_budget = self.capital * self.max_margin_pct
-                        num_contracts = max(1, int((max_margin_budget * self.max_leverage) / contract_val_usd))
+                        raw_contracts = (max_margin_budget * self.max_leverage) / contract_val_usd
+                        candidate_contracts = max(1, round(raw_contracts))
+                        
+                        # Verify margin + fee fits within 85% of equity (leaving at least 15% free cushion)
+                        req_margin = (candidate_contracts * contract_val_usd) / self.max_leverage
+                        fee_est = candidate_contracts * contract_val_usd * 0.0006
+                        if (req_margin + fee_est) <= (self.capital * 0.85):
+                            num_contracts = candidate_contracts
+                        else:
+                            num_contracts = max(1, int(raw_contracts))
                         
                         risk_pts = max(risk_dist, 20.0)
                         risk_usd = num_contracts * (risk_pts * 0.001)
@@ -898,10 +907,19 @@ class LiveICTPaperBot:
                         tp1_price = entry_price - (self.partial_tp_rr * risk_dist)
                         tp2_price = entry_price - (self.min_rr * risk_dist)
                         
-                        # Contract sizing: Always utilize the 80% margin budget (leaving 20% free cushion)
+                        # Contract sizing: Use 80% of total amount in trade, reserving ~20% for fees & cushion
                         contract_val_usd = entry_price * 0.001
                         max_margin_budget = self.capital * self.max_margin_pct
-                        num_contracts = max(1, int((max_margin_budget * self.max_leverage) / contract_val_usd))
+                        raw_contracts = (max_margin_budget * self.max_leverage) / contract_val_usd
+                        candidate_contracts = max(1, round(raw_contracts))
+                        
+                        # Verify margin + fee fits within 85% of equity (leaving at least 15% free cushion)
+                        req_margin = (candidate_contracts * contract_val_usd) / self.max_leverage
+                        fee_est = candidate_contracts * contract_val_usd * 0.0006
+                        if (req_margin + fee_est) <= (self.capital * 0.85):
+                            num_contracts = candidate_contracts
+                        else:
+                            num_contracts = max(1, int(raw_contracts))
                         
                         risk_pts = max(risk_dist, 20.0)
                         risk_usd = num_contracts * (risk_pts * 0.001)
