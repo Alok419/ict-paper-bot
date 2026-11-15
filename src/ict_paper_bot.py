@@ -190,6 +190,7 @@ class LiveICTPaperBot:
         self.risk_per_trade = float(get_env_variable(["RISK_PER_TRADE", "RISK"], str(risk_per_trade)))
         self.daily_loss_limit = float(get_env_variable(["DAILY_LOSS_LIMIT", "DAILY_LOSS"], str(daily_loss_limit)))
         self.max_trades_daily = int(get_env_variable(["MAX_TRADES_DAILY", "MAX_TRADES"], str(max_trades_daily)))
+        self.max_margin_pct = float(get_env_variable(["MAX_MARGIN_PCT", "MARGIN_CAP", "MARGIN_LIMIT"], "0.80"))
         
         # Real Mode is the default unless explicitly set to PAPER
         if explicit_mode != "PAPER":
@@ -292,6 +293,7 @@ class LiveICTPaperBot:
             f"• <b>Active Hours:</b> 4:30 PM to 9:00 AM IST (Overnight){status_line}\n"
             f"• <b>Max Leverage:</b> {self.max_leverage:.0f}x Capped\n"
             f"• <b>Risk Per Trade:</b> {self.risk_per_trade*100:.1f}%\n"
+            f"• <b>Margin Allocation Cap:</b> {self.max_margin_pct*100:.0f}% ({100 - self.max_margin_pct*100:.0f}% free cushion)\n"
             f"• <b>Daily Loss Circuit Breaker:</b> {self.daily_loss_limit*100:.1f}%\n"
             f"• <b>Strategy:</b> Model 1 (FVG) & Model 2 (iFVG) with MSS\n"
             f"• <i>Connected to Delta Exchange India! Real-time alerts will stream here.</i>"
@@ -743,9 +745,9 @@ class LiveICTPaperBot:
                         tp1_price = entry_price + (self.partial_tp_rr * risk_dist)
                         tp2_price = entry_price + (self.min_rr * risk_dist)
                         
-                        # Contract sizing with strict 60% margin safety cap on Delta Exchange India
+                        # Contract sizing with margin safety cap (default 80% equity, leaving 20% cushion)
                         contract_val_usd = entry_price * 0.001
-                        max_margin_budget = self.capital * 0.60
+                        max_margin_budget = self.capital * self.max_margin_pct
                         max_contracts_by_margin = max(1, int((max_margin_budget * self.max_leverage) / contract_val_usd))
                         
                         risk_usd = self.capital * self.risk_per_trade
@@ -865,9 +867,9 @@ class LiveICTPaperBot:
                         tp1_price = entry_price - (self.partial_tp_rr * risk_dist)
                         tp2_price = entry_price - (self.min_rr * risk_dist)
                         
-                        # Contract sizing with strict 60% margin safety cap on Delta Exchange India
+                        # Contract sizing with margin safety cap (default 80% equity, leaving 20% cushion)
                         contract_val_usd = entry_price * 0.001
-                        max_margin_budget = self.capital * 0.60
+                        max_margin_budget = self.capital * self.max_margin_pct
                         max_contracts_by_margin = max(1, int((max_margin_budget * self.max_leverage) / contract_val_usd))
                         
                         risk_usd = self.capital * self.risk_per_trade
