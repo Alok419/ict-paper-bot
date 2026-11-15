@@ -181,8 +181,8 @@ class LiveICTPaperBot:
     def __init__(self, initial_capital=100.0, max_leverage=50.0,
                  risk_per_trade=0.10, daily_loss_limit=0.20, max_trades_daily=3,
                  min_rr=2.5, partial_tp_rr=1.5, partial_tp_pct=0.5):
-        # Resolve Environment Variables
-        explicit_mode = get_env_variable(["TRADING_MODE", "MODE", "TRADINGMODE"], "").upper()
+        # Resolve Environment Variables (Defaults to REAL mode for production)
+        explicit_mode = get_env_variable(["TRADING_MODE", "MODE", "TRADINGMODE"], "REAL").upper()
         api_k = get_env_variable(["DELTA_API_KEY", "DELTA_KEY", "API_KEY", "DELTA_EXCHANGE_API_KEY"])
         api_s = get_env_variable(["DELTA_API_SECRET", "DELTA_SECRET", "API_SECRET", "DELTA_EXCHANGE_API_SECRET"])
         
@@ -191,8 +191,8 @@ class LiveICTPaperBot:
         self.daily_loss_limit = float(get_env_variable(["DAILY_LOSS_LIMIT", "DAILY_LOSS"], str(daily_loss_limit)))
         self.max_trades_daily = int(get_env_variable(["MAX_TRADES_DAILY", "MAX_TRADES"], str(max_trades_daily)))
         
-        # Real Mode Activation: If TRADING_MODE=REAL in Railway, or if API keys are present
-        if explicit_mode == "REAL" or (api_k and api_s and explicit_mode != "PAPER"):
+        # Real Mode is the default unless explicitly set to PAPER
+        if explicit_mode != "PAPER":
             self.trading_mode = "REAL"
             self.initial_capital = 11.90 # Standard ₹1,000 INR baseline
             self.capital = 11.90
@@ -244,8 +244,7 @@ class LiveICTPaperBot:
                     self.connection_msg = f"Error querying balance: {e}"
                     print(f"[REAL TRADING WARNING] Error fetching initial live balance: {e}", flush=True)
             else:
-                vis_keys = [k for k in os.environ.keys() if not k.startswith("_")]
-                self.connection_msg = f"API Keys not detected! (Container env keys: {vis_keys})"
+                self.connection_msg = "Awaiting API keys: please click 'Apply Changes' or 'Deploy' at bottom of Railway Variables tab!"
                 print(f"[REAL TRADING WARNING] {self.connection_msg}", flush=True)
         
         self.load_state()
@@ -278,9 +277,6 @@ class LiveICTPaperBot:
             f"🚀 <b>ICT BOT: SYSTEM ONLINE ({mode_badge})</b>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"• <b>Session Status:</b> {sess_badge}\n"
-            f"• <b>Trading Mode:</b> {mode_badge}\n"
-            f"• <b>Live Wallet Balance:</b> {bal_text}\n"
-            f"• <b>Active Hours:</b> 4:30 PM to 9:00 AM IST (Overnight){status_line}\n"
             f"• <b>Trading Mode:</b> {mode_badge}\n"
             f"• <b>Live Wallet Balance:</b> {bal_text}\n"
             f"• <b>Active Hours:</b> 4:30 PM to 9:00 AM IST (Overnight){status_line}\n"
