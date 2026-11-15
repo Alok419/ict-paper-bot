@@ -761,16 +761,15 @@ class LiveICTPaperBot:
                         tp1_price = entry_price + (self.partial_tp_rr * risk_dist)
                         tp2_price = entry_price + (self.min_rr * risk_dist)
                         
-                        # Contract sizing with margin safety cap (default 80% equity, leaving 20% cushion)
+                        # Contract sizing: Always utilize the 80% margin budget (leaving 20% free cushion)
                         contract_val_usd = entry_price * 0.001
                         max_margin_budget = self.capital * self.max_margin_pct
-                        max_contracts_by_margin = max(1, int((max_margin_budget * self.max_leverage) / contract_val_usd))
+                        num_contracts = max(1, int((max_margin_budget * self.max_leverage) / contract_val_usd))
                         
-                        risk_usd = self.capital * self.risk_per_trade
                         risk_pts = max(risk_dist, 20.0)
-                        contracts_by_risk = max(1, int(risk_usd / (risk_pts * 0.001)))
+                        risk_usd = num_contracts * (risk_pts * 0.001)
+                        risk_pct = (risk_usd / self.capital * 100.0) if self.capital > 0 else 0.0
                         
-                        num_contracts = min(contracts_by_risk, max_contracts_by_margin)
                         btc_size = num_contracts * 0.001
                         actual_notional = num_contracts * contract_val_usd
                         
@@ -879,7 +878,7 @@ class LiveICTPaperBot:
                             f"• <b>Take Profit 1 (1.5R):</b> ${tp1_price:,.1f} (50% exit + BE)\n"
                             f"• <b>Take Profit 2 (2.5R):</b> ${tp2_price:,.1f}\n"
                             f"• <b>Contracts:</b> {num_contracts} Contracts ({btc_size:.4f} BTC, ${actual_notional:.2f}){order_id_line}\n"
-                            f"• <b>Risk:</b> ${risk_usd:.2f} ({self.risk_per_trade*100:.1f}%)\n"
+                            f"• <b>Risk at SL:</b> ${risk_usd:.2f} ({risk_pct:.1f}%)\n"
                             f"• <b>Account Balance:</b> {bal_display}"
                         )
                         send_telegram_alert(entry_alert)
@@ -899,16 +898,15 @@ class LiveICTPaperBot:
                         tp1_price = entry_price - (self.partial_tp_rr * risk_dist)
                         tp2_price = entry_price - (self.min_rr * risk_dist)
                         
-                        # Contract sizing with margin safety cap (default 80% equity, leaving 20% cushion)
+                        # Contract sizing: Always utilize the 80% margin budget (leaving 20% free cushion)
                         contract_val_usd = entry_price * 0.001
                         max_margin_budget = self.capital * self.max_margin_pct
-                        max_contracts_by_margin = max(1, int((max_margin_budget * self.max_leverage) / contract_val_usd))
+                        num_contracts = max(1, int((max_margin_budget * self.max_leverage) / contract_val_usd))
                         
-                        risk_usd = self.capital * self.risk_per_trade
                         risk_pts = max(risk_dist, 20.0)
-                        contracts_by_risk = max(1, int(risk_usd / (risk_pts * 0.001)))
+                        risk_usd = num_contracts * (risk_pts * 0.001)
+                        risk_pct = (risk_usd / self.capital * 100.0) if self.capital > 0 else 0.0
                         
-                        num_contracts = min(contracts_by_risk, max_contracts_by_margin)
                         btc_size = num_contracts * 0.001
                         actual_notional = num_contracts * contract_val_usd
                         
@@ -1017,7 +1015,7 @@ class LiveICTPaperBot:
                             f"• <b>Take Profit 1 (1.5R):</b> ${tp1_price:,.1f} (50% exit + BE)\n"
                             f"• <b>Take Profit 2 (2.5R):</b> ${tp2_price:,.1f}\n"
                             f"• <b>Contracts:</b> {num_contracts} Contracts ({btc_size:.4f} BTC, ${actual_notional:.2f}){order_id_line}\n"
-                            f"• <b>Risk:</b> ${risk_usd:.2f} ({self.risk_per_trade*100:.1f}%)\n"
+                            f"• <b>Risk at SL:</b> ${risk_usd:.2f} ({risk_pct:.1f}%)\n"
                             f"• <b>Account Balance:</b> {bal_display}"
                         )
                         send_telegram_alert(entry_alert)
