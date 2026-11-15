@@ -173,12 +173,55 @@ class LiveICTPaperBot:
         self.load_state()
         self.save_state()
 
+    def send_startup_alert(self):
+        # Sync live balance if real mode
+        if self.trading_mode == "REAL" and self.delta_client:
+            try:
+                bal = self.delta_client.get_available_balance_usd()
+                if bal > 0:
+                    self.capital = bal
+            except Exception as e:
+                print(f"Error checking live balance: {e}", flush=True)
+
+        mode_badge = "🔥 REAL MONEY LIVE" if self.trading_mode == "REAL" else "📝 PAPER TRADING"
+        bal_text = f"${self.capital:,.2f} USD (~₹{self.capital * 84:,.0f} INR)" if self.trading_mode == "REAL" else f"${self.capital:,.2f}"
+        ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+        now_ist = datetime.datetime.now(ist)
+        is_active = self.is_in_session(now_ist)
+        sess_badge = "🟢 ACTIVE SESSION" if is_active else "⏳ STANDBY (Opens 4:30 PM IST)"
+        
+        msg = (
+            f"🚀 <b>ICT BOT: SYSTEM ONLINE ({mode_badge})</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━\n"
+            f"• <b>Session Status:</b> {sess_badge}\n"
+            f"• <b>Trading Mode:</b> {mode_badge}\n"
+            f"• <b>Live Wallet Balance:</b> {bal_text}\n"
+            f"• <b>Max Leverage:</b> {self.max_leverage:.0f}x Capped\n"
+            f"• <b>Risk Per Trade:</b> {self.risk_per_trade*100:.1f}%\n"
+            f"• <b>Daily Loss Circuit Breaker:</b> {self.daily_loss_limit*100:.1f}%\n"
+            f"• <b>Strategy:</b> Model 1 (FVG) & Model 2 (iFVG) with MSS\n"
+            f"• <i>Connected to Delta Exchange India! Real-time alerts will stream here.</i>"
+        )
+        send_telegram_alert(msg)
+
     def send_hourly_heartbeat(self, current_price, now_ist):
         is_active = self.is_in_session(now_ist)
         session_text = "🟢 ACTIVE SESSION (Trading)" if is_active else "⏳ STANDBY (Next session: 4:30 PM IST)"
         today_str = now_ist.strftime("%Y-%m-%d")
         day_stats = self.daily_stats.get(today_str, {"trades": 0, "pnl_usd": 0.0, "pnl_pct": 0.0})
         
+        # Sync live wallet balance if real mode
+        if self.trading_mode == "REAL" and self.delta_client:
+            try:
+                live_bal = self.delta_client.get_available_balance_usd()
+                if live_bal > 0:
+                    self.capital = live_bal
+            except Exception as e:
+                pass
+
+        bal_display = f"${self.capital:,.2f} (~₹{self.capital * 84:,.0f} INR)" if self.trading_mode == "REAL" else f"${self.capital:,.2f}"
+        mode_badge = "🔥 REAL MONEY" if self.trading_mode == "REAL" else "📝 PAPER"
+
         trade_status_text = "None (Scanning 15m candles for setups)"
         if self.active_trade:
             t = self.active_trade
@@ -194,11 +237,11 @@ class LiveICTPaperBot:
             
         pnl_day_sign = "+" if day_stats["pnl_usd"] >= 0 else "-"
         msg = (
-            f"⏱ <b>1-HOUR ICT BOT UPDATE</b> ({now_ist.strftime('%I:%M %p')} IST)\n"
+            f"⏱ <b>1-HOUR ICT BOT UPDATE ({mode_badge})</b>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"• <b>BTC Live Price:</b> ${current_price:,.1f}\n"
             f"• <b>Session Status:</b> {session_text}\n"
-            f"• <b>Account Balance:</b> ${self.capital:,.2f}\n"
+            f"• <b>Account Balance:</b> {bal_display}\n"
             f"• <b>Today's Realized PnL:</b> {pnl_day_sign}${abs(day_stats['pnl_usd']):.2f} ({day_stats['pnl_pct']*100:+.1f}%)\n"
             f"• <b>Trades Taken Today:</b> {day_stats['trades']} of {self.max_trades_daily} max\n"
             f"• <b>Active Position:</b> {trade_status_text}"
@@ -694,15 +737,23 @@ def run_live_loop():
     ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
     
     print("\n" + "="*65)
-    print("      ICT LIVE PAPER TRADING BOT - DELTA EXCHANGE INDIA")
+    print(f"      ICT LIVE TRADING ENGINE - DELTA EXCHANGE INDIA ({bot.trading_mode})")
     print("="*65)
-    print(f"Current Capital:             ${bot.capital:,.2f}")
+    print(f"Trading Mode:                {bot.trading_mode}")
+    print(f"Current Capital:             ${bot.capital:,.2f} (~₹{bot.capital * 84:,.0f} INR)")
     print(f"Trading Session:             4:30 PM to 11:55 PM IST (Daily)")
-    print(f"Risk Per Trade:              4.0% (${bot.capital * 0.04:,.2f})")
-    print(f"Daily Loss Limit:            8.0% (${bot.capital * 0.08:,.2f})")
-    print(f"Max Trades Per Day:          3 Trades")
+    print(f"Max Leverage Cap:            {bot.max_leverage:.0f}x")
+    print(f"Risk Per Trade:              {bot.risk_per_trade*100:.1f}% (${bot.capital * bot.risk_per_trade:,.2f})")
+    print(f"Daily Loss Limit:            {bot.daily_loss_limit*100:.1f}% (${bot.capital * bot.daily_loss_limit:,.2f})")
+    print(f"Max Trades Per Day:          {bot.max_trades_daily} Trades")
     print(f"Telegram Alerts:             {'CONNECTED & ACTIVE' if TELEGRAM_BOT_TOKEN else 'OFFLINE (Token needed in .env)'}")
     print("="*65 + "\n")
+
+    # Send Startup / Online Alert to Telegram immediately
+    try:
+        bot.send_startup_alert()
+    except Exception as e:
+        print(f"Error sending startup alert: {e}", flush=True)
 
     iteration = 0
     while True:
