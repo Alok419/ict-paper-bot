@@ -178,20 +178,23 @@ def fetch_live_ticker(symbol="BTCUSD"):
 # 3. LIVE PAPER TRADING ENGINE
 # -----------------------------------------------------------------------------
 class LiveICTPaperBot:
-    def __init__(self, initial_capital=100.0, max_leverage=25.0,
-                 risk_per_trade=0.10, daily_loss_limit=0.20, max_trades_daily=3,
-                 min_rr=2.5, partial_tp_rr=1.5, partial_tp_pct=0.5):
+    def __init__(self, initial_capital=100.0, max_leverage=40.0,
+                 risk_per_trade=0.15, daily_loss_limit=0.30, max_trades_daily=3,
+                 min_rr=4.0, partial_tp_rr=2.0, partial_tp_pct=0.5):
         # Resolve Environment Variables (Defaults to REAL mode for production)
         explicit_mode = get_env_variable(["TRADING_MODE", "MODE", "TRADINGMODE"], "REAL").upper()
         api_k = get_env_variable(["DELTA_API_KEY", "DELTA_KEY", "API_KEY", "DELTA_EXCHANGE_API_KEY"])
         api_s = get_env_variable(["DELTA_API_SECRET", "DELTA_SECRET", "API_SECRET", "DELTA_EXCHANGE_API_SECRET"])
         
-        raw_lev = float(get_env_variable(["MAX_LEVERAGE", "LEVERAGE"], "25.0"))
-        self.max_leverage = min(25.0, raw_lev) if raw_lev > 25.0 else raw_lev
+        raw_lev = float(get_env_variable(["MAX_LEVERAGE", "LEVERAGE"], "40.0"))
+        self.max_leverage = min(40.0, raw_lev) if raw_lev > 40.0 else raw_lev
         self.risk_per_trade = float(get_env_variable(["RISK_PER_TRADE", "RISK"], str(risk_per_trade)))
         self.daily_loss_limit = float(get_env_variable(["DAILY_LOSS_LIMIT", "DAILY_LOSS"], str(daily_loss_limit)))
         self.max_trades_daily = int(get_env_variable(["MAX_TRADES_DAILY", "MAX_TRADES"], str(max_trades_daily)))
         self.max_margin_pct = float(get_env_variable(["MAX_MARGIN_PCT", "MARGIN_CAP", "MARGIN_LIMIT"], "0.80"))
+        self.min_rr = float(get_env_variable(["MIN_RR", "RR", "TARGET_RR"], str(min_rr)))
+        self.partial_tp_rr = float(get_env_variable(["PARTIAL_TP_RR", "BE_RR"], str(partial_tp_rr)))
+        self.partial_tp_pct = float(get_env_variable(["PARTIAL_TP_PCT"], str(partial_tp_pct)))
         
         # Real Mode is the default unless explicitly set to PAPER
         if explicit_mode != "PAPER":
@@ -271,7 +274,7 @@ class LiveICTPaperBot:
         ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
         now_ist = datetime.datetime.now(ist)
         is_active = self.is_in_session(now_ist)
-        sess_badge = "🟢 ACTIVE SESSION (4:30 PM - 9:00 AM IST)" if is_active else "⏳ STANDBY (Next session: 4:30 PM IST)"
+        sess_badge = "🟢 ACTIVE SESSION (8:00 PM - 11:55 PM IST)" if is_active else "⏳ STANDBY (Next session: 8:00 PM IST)"
         
         if self.trading_mode == "REAL":
             if self.delta_client:
@@ -298,11 +301,12 @@ class LiveICTPaperBot:
             f"• <b>Session Status:</b> {sess_badge}\n"
             f"• <b>Trading Mode:</b> {mode_badge}\n"
             f"• <b>Live Wallet Balance:</b> {bal_text}\n"
-            f"• <b>Active Hours:</b> 4:30 PM to 9:00 AM IST (Overnight){status_line}\n"
+            f"• <b>Active Hours:</b> 8:00 PM to 11:55 PM IST (US Session){status_line}\n"
             f"• <b>Max Leverage:</b> {self.max_leverage:.0f}x Capped\n"
             f"• <b>Risk Per Trade:</b> {self.risk_per_trade*100:.1f}%\n"
             f"• <b>Margin Allocation Cap:</b> {self.max_margin_pct*100:.0f}% ({100 - self.max_margin_pct*100:.0f}% free cushion)\n"
             f"• <b>Daily Loss Circuit Breaker:</b> {self.daily_loss_limit*100:.1f}%\n"
+            f"• <b>Targets:</b> 1:2 RR (50% Banked + SL to CTC) & 1:4 RR Complete TP\n"
             f"• <b>Strategy:</b> Model 1 (FVG) & Model 2 (iFVG) with MSS\n"
             f"• <i>Connected to Delta Exchange India! Real-time alerts will stream here.</i>"
         )
@@ -310,7 +314,7 @@ class LiveICTPaperBot:
 
     def send_hourly_heartbeat(self, current_price, now_ist):
         is_active = self.is_in_session(now_ist)
-        session_text = "🟢 ACTIVE SESSION (4:30 PM - 9:00 AM IST)" if is_active else "⏳ STANDBY (Next session: 4:30 PM IST)"
+        session_text = "🟢 ACTIVE SESSION (8:00 PM - 11:55 PM IST)" if is_active else "⏳ STANDBY (Next session: 8:00 PM IST)"
         today_str = self.get_session_date(now_ist)
         day_stats = self.daily_stats.get(today_str, {"trades": 0, "pnl_usd": 0.0, "pnl_pct": 0.0})
         
@@ -367,7 +371,7 @@ class LiveICTPaperBot:
         bal_display = self.balance_desc if (self.trading_mode == "REAL" and self.balance_desc) else f"${self.capital:,.2f}"
         
         msg = (
-            f"🌙 <b>ICT BOT: OVERNIGHT SESSION SUMMARY (9:00 AM IST)</b>\n"
+            f"🌙 <b>ICT BOT: DAILY SESSION SUMMARY (11:55 PM IST)</b>\n"
             f"━━━━━━━━━━━━━━━━━━━\n"
             f"• <b>Session Date:</b> {session_str}\n"
             f"• <b>Trades Taken:</b> {day_stats['trades']} ({wins} Wins / {losses} Losses)\n"
@@ -375,7 +379,7 @@ class LiveICTPaperBot:
             f"• <b>Closing Account Balance:</b> {bal_display}\n"
             f"• <b>Total Net Return (All Time):</b> {total_growth:+.1f}%\n"
             f"• <b>Active Runners:</b> {'Running to SL/TP' if self.active_trade else 'None'}\n"
-            f"• <i>Session closed. New trade entries will resume today at 4:30 PM IST.</i>"
+            f"• <i>Session closed. New trade entries will resume tomorrow at 8:00 PM IST.</i>"
         )
         send_telegram_alert(msg)
 
@@ -425,12 +429,7 @@ class LiveICTPaperBot:
             json.dump(st, f, indent=2)
 
     def get_session_date(self, now_ist):
-        """
-        Trading session runs 4:30 PM (16:30 IST) overnight through midnight to 9:00 AM (09:00 IST).
-        Hours 00:00 to 08:59 belong to the session that opened at 16:30 yesterday.
-        """
-        if now_ist.hour < 9:
-            return (now_ist - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        """Trading session runs 8:00 PM (20:00 IST) to 11:55 PM (23:55 IST)."""
         return now_ist.strftime("%Y-%m-%d")
 
     def is_in_session(self, now_ist=None):
@@ -439,10 +438,8 @@ class LiveICTPaperBot:
             now_ist = datetime.datetime.now(ist)
         h = now_ist.hour
         m = now_ist.minute
-        # 4:30 PM (16:30 IST) overnight through midnight to 9:00 AM (09:00 IST)
-        is_evening = (h == 16 and m >= 30) or (17 <= h <= 23)
-        is_morning = (0 <= h < 9)
-        return is_evening or is_morning
+        # 8:00 PM (20:00 IST) to 11:55 PM (23:55 IST)
+        return (20 <= h <= 23) and not (h == 23 and m >= 55)
 
     def process_tick(self):
         ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
@@ -503,18 +500,18 @@ class LiveICTPaperBot:
                 if current_price <= t["sl"]:
                     exit_price = t["sl"]
                     if t["be_activated"]:
-                        exit_reason = "Breakeven SL Hit (50% TP1 Banked)"
+                        exit_reason = "CTC SL Hit (50% Profit Banked at 1:2 RR)"
                     else:
                         exit_reason = "Initial SL Hit (-1.0R)"
                     trade_closed = True
-                # TP1 Check (1.5R)
+                # TP1 Check (1:2 RR)
                 elif not t["tp1_hit"] and current_price >= t["tp1"]:
                     t["tp1_hit"] = True
                     partial_gain = (t["size"] * self.partial_tp_pct) * (t["tp1"] - t["entry"])
                     self.capital += partial_gain
                     t["realized_pnl"] += partial_gain
                     t["size"] *= (1.0 - self.partial_tp_pct)
-                    t["sl"] = t["entry"] # Move to breakeven
+                    t["sl"] = t["entry"] # Move to CTC / Breakeven
                     t["be_activated"] = True
                     
                     # Close 50% contracts on Delta Exchange India if real trading
@@ -531,28 +528,28 @@ class LiveICTPaperBot:
                     self.save_state()
                     
                     alert_msg = (
-                        f"🎯 <b>ICT BOT: TAKE PROFIT 1 HIT (+1.5R)</b>\n"
+                        f"🎯 <b>ICT BOT: TARGET 1 HIT (+{self.partial_tp_rr:.1f}R / 1:2 RR)</b>\n"
                         f"━━━━━━━━━━━━━━━━━━━\n"
                         f"• <b>Symbol:</b> BTCUSD (Delta Exchange India)\n"
                         f"• <b>Side:</b> LONG 🟢\n"
                         f"• <b>Target 1:</b> ${t['tp1']:,.1f}\n"
                         f"• <b>Banked Profit:</b> +${partial_gain:.2f}\n"
-                        f"• <b>SL Status:</b> MOVED TO BREAKEVEN (${t['entry']:,.1f})\n"
+                        f"• <b>SL Status:</b> MOVED TO CTC (Cost to Cost / Breakeven at ${t['entry']:,.1f}) 🛡️\n"
                         f"• <b>Account Balance:</b> ${self.capital:,.2f}\n"
-                        f"• <i>Remaining 50% running risk-free to TP2 (${t['tp2']:,.1f})!</i>"
+                        f"• <i>Remaining 50% running risk-free to Complete TP (+{self.min_rr:.1f}R / 1:4 RR: ${t['tp2']:,.1f})!</i>"
                     )
                     send_telegram_alert(alert_msg)
-                    print(f"\n[ALERT] TP1 Hit on Trade #{t['id']}! Banked +${partial_gain:.2f}. Stop Loss moved to Breakeven.\n")
-                # TP2 Check (2.5R)
+                    print(f"\n[ALERT] TP1 Hit on Trade #{t['id']}! Banked +${partial_gain:.2f}. Stop Loss moved to CTC.\n")
+                # TP2 Check (1:4 RR / Complete TP)
                 elif t["tp1_hit"] and current_price >= t["tp2"]:
                     exit_price = t["tp2"]
-                    exit_reason = "Full Target TP2 Hit (+2.5R)"
+                    exit_reason = f"Complete Target TP2 Hit (+{self.min_rr:.1f}R / 1:4 RR)"
                     trade_closed = True
             else: # SHORT
                 if current_price >= t["sl"]:
                     exit_price = t["sl"]
                     if t["be_activated"]:
-                        exit_reason = "Breakeven SL Hit (50% TP1 Banked)"
+                        exit_reason = "CTC SL Hit (50% Profit Banked at 1:2 RR)"
                     else:
                         exit_reason = "Initial SL Hit (-1.0R)"
                     trade_closed = True
@@ -579,21 +576,21 @@ class LiveICTPaperBot:
                     self.save_state()
                     
                     alert_msg = (
-                        f"🎯 <b>ICT BOT: TAKE PROFIT 1 HIT (+1.5R)</b>\n"
+                        f"🎯 <b>ICT BOT: TARGET 1 HIT (+{self.partial_tp_rr:.1f}R / 1:2 RR)</b>\n"
                         f"━━━━━━━━━━━━━━━━━━━\n"
                         f"• <b>Symbol:</b> BTCUSD (Delta Exchange India)\n"
                         f"• <b>Side:</b> SHORT 🔴\n"
                         f"• <b>Target 1:</b> ${t['tp1']:,.1f}\n"
                         f"• <b>Banked Profit:</b> +${partial_gain:.2f}\n"
-                        f"• <b>SL Status:</b> MOVED TO BREAKEVEN (${t['entry']:,.1f})\n"
+                        f"• <b>SL Status:</b> MOVED TO CTC (Cost to Cost / Breakeven at ${t['entry']:,.1f}) 🛡️\n"
                         f"• <b>Account Balance:</b> ${self.capital:,.2f}\n"
-                        f"• <i>Remaining 50% running risk-free to TP2 (${t['tp2']:,.1f})!</i>"
+                        f"• <i>Remaining 50% running risk-free to Complete TP (+{self.min_rr:.1f}R / 1:4 RR: ${t['tp2']:,.1f})!</i>"
                     )
                     send_telegram_alert(alert_msg)
-                    print(f"\n[ALERT] TP1 Hit on Trade #{t['id']}! Banked +${partial_gain:.2f}. Stop Loss moved to Breakeven.\n")
+                    print(f"\n[ALERT] TP1 Hit on Trade #{t['id']}! Banked +${partial_gain:.2f}. Stop Loss moved to CTC.\n")
                 elif t["tp1_hit"] and current_price <= t["tp2"]:
                     exit_price = t["tp2"]
-                    exit_reason = "Full Target TP2 Hit (+2.5R)"
+                    exit_reason = f"Complete Target TP2 Hit (+{self.min_rr:.1f}R / 1:4 RR)"
                     trade_closed = True
 
             if trade_closed:
@@ -891,8 +888,8 @@ class LiveICTPaperBot:
                             f"• <b>Setup Model:</b> {f['type']} (MSS Confirmed)\n"
                             f"• <b>Entry Price:</b> ${entry_price:,.1f}\n"
                             f"• <b>Stop Loss:</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
-                            f"• <b>Take Profit 1 (1.5R):</b> ${tp1_price:,.1f} (50% exit + BE)\n"
-                            f"• <b>Take Profit 2 (2.5R):</b> ${tp2_price:,.1f}\n"
+                            f"• <b>Target 1 (1:2 RR):</b> ${tp1_price:,.1f} (50% exit + SL to CTC)\n"
+                            f"• <b>Complete Target (1:4 RR):</b> ${tp2_price:,.1f}\n"
                             f"• <b>Contracts:</b> {num_contracts} Contracts ({btc_size:.4f} BTC, ${actual_notional:.2f}){order_id_line}\n"
                             f"• <b>Risk at SL:</b> ${risk_usd:.2f} ({risk_pct:.1f}%)\n"
                             f"• <b>Account Balance:</b> {bal_display}"
@@ -1044,8 +1041,8 @@ class LiveICTPaperBot:
                             f"• <b>Setup Model:</b> {f['type']} (MSS Confirmed)\n"
                             f"• <b>Entry Price:</b> ${entry_price:,.1f}\n"
                             f"• <b>Stop Loss:</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
-                            f"• <b>Take Profit 1 (1.5R):</b> ${tp1_price:,.1f} (50% exit + BE)\n"
-                            f"• <b>Take Profit 2 (2.5R):</b> ${tp2_price:,.1f}\n"
+                            f"• <b>Target 1 (1:2 RR):</b> ${tp1_price:,.1f} (50% exit + SL to CTC)\n"
+                            f"• <b>Complete Target (1:4 RR):</b> ${tp2_price:,.1f}\n"
                             f"• <b>Contracts:</b> {num_contracts} Contracts ({btc_size:.4f} BTC, ${actual_notional:.2f}){order_id_line}\n"
                             f"• <b>Risk at SL:</b> ${risk_usd:.2f} ({risk_pct:.1f}%)\n"
                             f"• <b>Account Balance:</b> {bal_display}"
@@ -1067,10 +1064,11 @@ def run_live_loop():
     print("="*65)
     print(f"Trading Mode:                {bot.trading_mode}")
     print(f"Current Capital:             {bal_str}")
-    print(f"Trading Session:             4:30 PM to 9:00 AM IST (Overnight)")
+    print(f"Trading Session:             8:00 PM to 11:55 PM IST (US Session)")
     print(f"Max Leverage Cap:            {bot.max_leverage:.0f}x")
     print(f"Risk Per Trade:              {bot.risk_per_trade*100:.1f}% (${bot.capital * bot.risk_per_trade:,.2f})")
     print(f"Daily Loss Limit:            {bot.daily_loss_limit*100:.1f}% (${bot.capital * bot.daily_loss_limit:,.2f})")
+    print(f"Targets & RR:                1:2 RR (50% Banked + CTC) | 1:4 RR Complete TP")
     print(f"Max Trades Per Day:          {bot.max_trades_daily} Trades")
     print(f"Telegram Alerts:             {'CONNECTED & ACTIVE' if TELEGRAM_BOT_TOKEN else 'OFFLINE (Token needed in .env)'}")
     print("="*65 + "\n")
@@ -1100,29 +1098,30 @@ def run_live_loop():
                 except Exception as e:
                     print(f"Error sending hourly heartbeat: {e}", flush=True)
 
-            # Daily Summary at 9:00 AM IST (when overnight session concludes)
-            if now_ist.hour == 9 and now_ist.minute < 5 and not bot.daily_summary_sent:
+            # Daily Summary at 11:55 PM IST (when US session concludes)
+            if now_ist.hour == 23 and now_ist.minute >= 55 and not bot.daily_summary_sent:
                 try:
                     bot.send_daily_summary(now_ist)
                     bot.daily_summary_sent = True
                 except Exception as e:
                     print(f"Error sending daily summary: {e}", flush=True)
-            elif now_ist.hour != 9:
+            elif now_ist.hour != 23:
                 bot.daily_summary_sent = False
 
-            # Session open notification (fires when entering 4:30 PM)
+            # Session open notification (fires when entering 8:00 PM)
             if is_active and not bot.session_notified:
                 bot.session_notified = True
                 bal_display = bot.balance_desc if (bot.trading_mode == "REAL" and bot.balance_desc) else f"${bot.capital:,.2f}"
                 mode_badge = "🔥 REAL MONEY LIVE" if bot.trading_mode == "REAL" else "📝 PAPER TRADING"
                 open_msg = (
-                    "🟢 <b>ICT OVERNIGHT SESSION OPEN: 4:30 PM IST</b>\n"
+                    "🟢 <b>ICT US SESSION OPEN: 8:00 PM IST</b>\n"
                     "━━━━━━━━━━━━━━━━━━━\n"
                     "• <b>Symbol:</b> BTCUSD (Delta Exchange India)\n"
                     f"• <b>Trading Mode:</b> {mode_badge}\n"
                     "• <b>Status:</b> Scanning live 15m candles for ICT setups.\n"
                     f"• <b>Capital:</b> {bal_display}\n"
-                    "• <b>Active Hours:</b> 4:30 PM to 9:00 AM IST (Overnight)"
+                    "• <b>Active Hours:</b> 8:00 PM to 11:55 PM IST (US Session)\n"
+                    "• <b>Targets:</b> 1:2 RR (50% Banked + CTC) & 1:4 RR Complete TP"
                 )
                 send_telegram_alert(open_msg)
             elif not is_active:
@@ -1133,7 +1132,7 @@ def run_live_loop():
                 ticker = fetch_live_ticker("BTCUSD")
                 price_str = f"${ticker['close']:,.1f}" if ticker else "N/A"
                 trade_str = f"ACTIVE ({bot.active_trade['side']} @ ${bot.active_trade['entry']:,.1f})" if bot.active_trade else "No Open Trade"
-                session_str = "ACTIVE SESSION 🟢" if is_active else "STANDBY (Opens 4:30 PM IST) ⏳"
+                session_str = "ACTIVE SESSION 🟢" if is_active else "STANDBY (Opens 8:00 PM IST) ⏳"
                 bal_disp = bot.balance_desc if (bot.trading_mode == 'REAL' and bot.balance_desc) else f"${bot.capital:,.2f}"
                 print(f"[{now_ist.strftime('%I:%M:%S %p')} IST] BTC: {price_str} | Session: {session_str} | Status: {trade_str} | Balance: {bal_disp}", flush=True)
                 bot.save_state()
