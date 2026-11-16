@@ -757,7 +757,7 @@ class LiveICTPaperBot:
                     sl_price = f["bottom"] - 5.0
                     risk_dist = entry_price - sl_price
                     
-                    if risk_dist > 20.0 and (risk_dist / entry_price) < 0.02:
+                    if risk_dist >= 60.0 and (risk_dist / entry_price) < 0.02:
                         tp1_price = entry_price + (self.partial_tp_rr * risk_dist)
                         tp2_price = entry_price + (self.min_rr * risk_dist)
                         
@@ -910,7 +910,7 @@ class LiveICTPaperBot:
                     sl_price = f["top"] + 5.0
                     risk_dist = sl_price - entry_price
                     
-                    if risk_dist > 20.0 and (risk_dist / entry_price) < 0.02:
+                    if risk_dist >= 60.0 and (risk_dist / entry_price) < 0.02:
                         tp1_price = entry_price - (self.partial_tp_rr * risk_dist)
                         tp2_price = entry_price - (self.min_rr * risk_dist)
                         
