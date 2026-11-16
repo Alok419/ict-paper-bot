@@ -178,7 +178,7 @@ def fetch_live_ticker(symbol="BTCUSD"):
 # 3. LIVE PAPER TRADING ENGINE
 # -----------------------------------------------------------------------------
 class LiveICTPaperBot:
-    def __init__(self, initial_capital=100.0, max_leverage=40.0,
+    def __init__(self, initial_capital=100.0, max_leverage=25.0,
                  risk_per_trade=0.10, daily_loss_limit=0.20, max_trades_daily=3,
                  min_rr=2.5, partial_tp_rr=1.5, partial_tp_pct=0.5):
         # Resolve Environment Variables (Defaults to REAL mode for production)
@@ -186,8 +186,8 @@ class LiveICTPaperBot:
         api_k = get_env_variable(["DELTA_API_KEY", "DELTA_KEY", "API_KEY", "DELTA_EXCHANGE_API_KEY"])
         api_s = get_env_variable(["DELTA_API_SECRET", "DELTA_SECRET", "API_SECRET", "DELTA_EXCHANGE_API_SECRET"])
         
-        raw_lev = float(get_env_variable(["MAX_LEVERAGE", "LEVERAGE"], "40.0"))
-        self.max_leverage = min(40.0, raw_lev) if raw_lev > 40.0 else raw_lev
+        raw_lev = float(get_env_variable(["MAX_LEVERAGE", "LEVERAGE"], "25.0"))
+        self.max_leverage = min(25.0, raw_lev) if raw_lev > 25.0 else raw_lev
         self.risk_per_trade = float(get_env_variable(["RISK_PER_TRADE", "RISK"], str(risk_per_trade)))
         self.daily_loss_limit = float(get_env_variable(["DAILY_LOSS_LIMIT", "DAILY_LOSS"], str(daily_loss_limit)))
         self.max_trades_daily = int(get_env_variable(["MAX_TRADES_DAILY", "MAX_TRADES"], str(max_trades_daily)))
@@ -767,10 +767,10 @@ class LiveICTPaperBot:
                         raw_contracts = (max_margin_budget * self.max_leverage) / contract_val_usd
                         candidate_contracts = max(1, round(raw_contracts))
                         
-                        # Verify margin + fee fits within 85% of equity (leaving at least 15% free cushion)
+                        # Verify margin + fee fits within 90% of equity (leaving at least 10% free cushion)
                         req_margin = (candidate_contracts * contract_val_usd) / self.max_leverage
                         fee_est = candidate_contracts * contract_val_usd * 0.0006
-                        if (req_margin + fee_est) <= (self.capital * 0.85):
+                        if (req_margin + fee_est) <= (self.capital * 0.90):
                             num_contracts = candidate_contracts
                         else:
                             num_contracts = max(1, int(raw_contracts))
@@ -913,10 +913,10 @@ class LiveICTPaperBot:
                         raw_contracts = (max_margin_budget * self.max_leverage) / contract_val_usd
                         candidate_contracts = max(1, round(raw_contracts))
                         
-                        # Verify margin + fee fits within 85% of equity (leaving at least 15% free cushion)
+                        # Verify margin + fee fits within 90% of equity (leaving at least 10% free cushion)
                         req_margin = (candidate_contracts * contract_val_usd) / self.max_leverage
                         fee_est = candidate_contracts * contract_val_usd * 0.0006
-                        if (req_margin + fee_est) <= (self.capital * 0.85):
+                        if (req_margin + fee_est) <= (self.capital * 0.90):
                             num_contracts = candidate_contracts
                         else:
                             num_contracts = max(1, int(raw_contracts))
