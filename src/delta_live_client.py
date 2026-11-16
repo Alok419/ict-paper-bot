@@ -122,7 +122,7 @@ class DeltaExchangeLiveClient:
             print(f"[WALLET BALANCE ERROR] Delta API returned: {err_msg}", flush=True)
             return 0.0, 0.0, f"Error: {err_msg}"
 
-    def set_leverage(self, product_id=27, leverage=40.0):
+    def set_leverage(self, product_id=27, leverage=50.0):
         """Configures order leverage for BTCUSD (Product ID 27)."""
         payload = {"leverage": str(int(leverage))}
         return self._request("POST", f"/v2/products/{product_id}/orders/leverage", payload=payload)

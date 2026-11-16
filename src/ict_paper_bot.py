@@ -178,21 +178,22 @@ def fetch_live_ticker(symbol="BTCUSD"):
 # 3. LIVE PAPER TRADING ENGINE
 # -----------------------------------------------------------------------------
 class LiveICTPaperBot:
-    def __init__(self, initial_capital=100.0, max_leverage=40.0,
+    def __init__(self, initial_capital=100.0, max_leverage=50.0,
                  risk_per_trade=0.15, daily_loss_limit=0.30, max_trades_daily=3,
-                 min_rr=4.0, partial_tp_rr=2.0, partial_tp_pct=0.5):
+                 min_rr=4.0, ctc_trigger_rr=1.5, partial_tp_rr=2.0, partial_tp_pct=0.5):
         # Resolve Environment Variables (Defaults to REAL mode for production)
         explicit_mode = get_env_variable(["TRADING_MODE", "MODE", "TRADINGMODE"], "REAL").upper()
         api_k = get_env_variable(["DELTA_API_KEY", "DELTA_KEY", "API_KEY", "DELTA_EXCHANGE_API_KEY"])
         api_s = get_env_variable(["DELTA_API_SECRET", "DELTA_SECRET", "API_SECRET", "DELTA_EXCHANGE_API_SECRET"])
         
-        raw_lev = float(get_env_variable(["MAX_LEVERAGE", "LEVERAGE"], "40.0"))
-        self.max_leverage = min(40.0, raw_lev) if raw_lev > 40.0 else raw_lev
+        raw_lev = float(get_env_variable(["MAX_LEVERAGE", "LEVERAGE"], "50.0"))
+        self.max_leverage = min(50.0, raw_lev) if raw_lev > 50.0 else raw_lev
         self.risk_per_trade = float(get_env_variable(["RISK_PER_TRADE", "RISK"], str(risk_per_trade)))
         self.daily_loss_limit = float(get_env_variable(["DAILY_LOSS_LIMIT", "DAILY_LOSS"], str(daily_loss_limit)))
         self.max_trades_daily = int(get_env_variable(["MAX_TRADES_DAILY", "MAX_TRADES"], str(max_trades_daily)))
         self.max_margin_pct = float(get_env_variable(["MAX_MARGIN_PCT", "MARGIN_CAP", "MARGIN_LIMIT"], "0.80"))
         self.min_rr = float(get_env_variable(["MIN_RR", "RR", "TARGET_RR"], str(min_rr)))
+        self.ctc_trigger_rr = float(get_env_variable(["CTC_TRIGGER_RR", "BE_RR"], str(ctc_trigger_rr)))
         self.partial_tp_rr = float(get_env_variable(["PARTIAL_TP_RR", "BE_RR"], str(partial_tp_rr)))
         self.partial_tp_pct = float(get_env_variable(["PARTIAL_TP_PCT"], str(partial_tp_pct)))
         
@@ -302,7 +303,7 @@ class LiveICTPaperBot:
             f"• <b>Risk Per Trade:</b> {self.risk_per_trade*100:.1f}%\n"
             f"• <b>Margin Allocation Cap:</b> {self.max_margin_pct*100:.0f}% ({100 - self.max_margin_pct*100:.0f}% free cushion)\n"
             f"• <b>Daily Loss Circuit Breaker:</b> {self.daily_loss_limit*100:.1f}%\n"
-            f"• <b>Target & Exit Model:</b> Pure Binary 1:4 RR (Either Full TP +4.0R or Full SL -1.0R)\n"
+            f"• <b>Target & Exit Model:</b> Move SL to CTC at +{self.ctc_trigger_rr:.1f}R & Full 1:4 RR (+4.0R) Target\n"
             f"• <b>Strategy:</b> Model 1 (FVG) & Model 2 (iFVG) with MSS\n"
             f"• <i>Connected to Delta Exchange India! Real-time alerts will stream here.</i>"
         )
@@ -492,23 +493,63 @@ class LiveICTPaperBot:
             exit_reason = ""
             
             if is_long:
-                # Stop Loss check (-1.0R)
+                # 1. CTC Shift Check: Move Stop Loss to Entry once +1.5R is reached
+                if not t.get("be_activated", False):
+                    ctc_trigger_p = t["entry"] + (self.ctc_trigger_rr * t["risk_dist"])
+                    if current_price >= ctc_trigger_p:
+                        t["be_activated"] = True
+                        t["sl"] = t["entry"]
+                        self.save_state()
+                        ctc_alert = (
+                            f"🛡️ <b>ICT BOT: STOP LOSS MOVED TO CTC (+{self.ctc_trigger_rr:.1f}R REACHED)</b>\n"
+                            f"━━━━━━━━━━━━━━━━━━━\n"
+                            f"• <b>Trade #{t['id']}</b> | <b>Side:</b> LONG 🟢\n"
+                            f"• <b>Trigger Level (+{self.ctc_trigger_rr:.1f}R):</b> ${ctc_trigger_p:,.1f}\n"
+                            f"• <b>New Stop Loss:</b> ${t['entry']:,.1f} (Cost-to-Cost / Breakeven)\n"
+                            f"• <b>Status:</b> Position is now 100% RISK-FREE! 🛡️\n"
+                            f"• <b>Take Profit (+4.0R):</b> ${t.get('tp', t.get('tp2', 0)):,.1f}\n"
+                            f"• <i>Holding all {t.get('contracts', 0)} contracts risk-free for full 1:4 TP.</i>"
+                        )
+                        send_telegram_alert(ctc_alert)
+                        print(f"[TRADE CTC ACTIVATED] Trade #{t['id']} SL moved to CTC at ${t['entry']:,.1f} (Target: ${t.get('tp', 0):,.1f})", flush=True)
+
+                # 2. Stop Loss / Breakeven check
                 if current_price <= t["sl"]:
                     exit_price = t["sl"]
-                    exit_reason = "Stop Loss Hit (-1.0R)"
+                    exit_reason = "Cost-to-Cost (CTC) Breakeven Exit ($0.00 Risk)" if t.get("be_activated") else "Initial Stop Loss Hit (-1.0R)"
                     trade_closed = True
-                # Take Profit Check (+4.0R / 1:4 RR)
+                # 3. Take Profit Check (+4.0R / 1:4 RR)
                 elif current_price >= t.get("tp", t.get("tp2", 0)):
                     exit_price = t.get("tp", t.get("tp2", 0))
                     exit_reason = f"Take Profit Hit (+{self.min_rr:.1f}R / 1:4 RR)"
                     trade_closed = True
             else: # SHORT
-                # Stop Loss check (-1.0R)
+                # 1. CTC Shift Check: Move Stop Loss to Entry once +1.5R is reached
+                if not t.get("be_activated", False):
+                    ctc_trigger_p = t["entry"] - (self.ctc_trigger_rr * t["risk_dist"])
+                    if current_price <= ctc_trigger_p:
+                        t["be_activated"] = True
+                        t["sl"] = t["entry"]
+                        self.save_state()
+                        ctc_alert = (
+                            f"🛡️ <b>ICT BOT: STOP LOSS MOVED TO CTC (+{self.ctc_trigger_rr:.1f}R REACHED)</b>\n"
+                            f"━━━━━━━━━━━━━━━━━━━\n"
+                            f"• <b>Trade #{t['id']}</b> | <b>Side:</b> SHORT 🔴\n"
+                            f"• <b>Trigger Level (+{self.ctc_trigger_rr:.1f}R):</b> ${ctc_trigger_p:,.1f}\n"
+                            f"• <b>New Stop Loss:</b> ${t['entry']:,.1f} (Cost-to-Cost / Breakeven)\n"
+                            f"• <b>Status:</b> Position is now 100% RISK-FREE! 🛡️\n"
+                            f"• <b>Take Profit (+4.0R):</b> ${t.get('tp', t.get('tp2', 0)):,.1f}\n"
+                            f"• <i>Holding all {t.get('contracts', 0)} contracts risk-free for full 1:4 TP.</i>"
+                        )
+                        send_telegram_alert(ctc_alert)
+                        print(f"[TRADE CTC ACTIVATED] Trade #{t['id']} SL moved to CTC at ${t['entry']:,.1f} (Target: ${t.get('tp', 0):,.1f})", flush=True)
+
+                # 2. Stop Loss / Breakeven check
                 if current_price >= t["sl"]:
                     exit_price = t["sl"]
-                    exit_reason = "Stop Loss Hit (-1.0R)"
+                    exit_reason = "Cost-to-Cost (CTC) Breakeven Exit ($0.00 Risk)" if t.get("be_activated") else "Initial Stop Loss Hit (-1.0R)"
                     trade_closed = True
-                # Take Profit Check (+4.0R / 1:4 RR)
+                # 3. Take Profit Check (+4.0R / 1:4 RR)
                 elif current_price <= t.get("tp", t.get("tp2", 0)):
                     exit_price = t.get("tp", t.get("tp2", 0))
                     exit_reason = f"Take Profit Hit (+{self.min_rr:.1f}R / 1:4 RR)"
@@ -806,15 +847,17 @@ class LiveICTPaperBot:
                         bal_display = self.balance_desc if (self.trading_mode == "REAL" and self.balance_desc) else f"${self.capital:,.2f}"
                         reward_usd = risk_usd * self.min_rr
                         reward_pct = risk_pct * self.min_rr
+                        ctc_trigger_p = entry_price + (self.ctc_trigger_rr * risk_dist)
                         entry_alert = (
                             f"🚀 <b>ICT BOT: NEW ORDER EXECUTED ({mode_badge})</b>\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
                             f"• <b>Trade #{self.active_trade['id']}</b> | <b>Side:</b> LONG 🟢\n"
                             f"• <b>Setup Model:</b> {f['type']} (MSS Confirmed)\n"
                             f"• <b>Entry Price:</b> ${entry_price:,.1f}\n"
-                            f"• <b>Stop Loss (-1.0R):</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
+                            f"• <b>Initial Stop Loss (-1.0R):</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
+                            f"• <b>CTC Protection (+{self.ctc_trigger_rr:.1f}R):</b> ${ctc_trigger_p:,.1f} (SL moves to Cost)\n"
                             f"• <b>Take Profit (+4.0R / 1:4 RR):</b> ${tp_price:,.1f} ({risk_dist * self.min_rr:.1f} pts)\n"
-                            f"• <b>Execution Model:</b> Pure Binary (Either Full TP or Full SL)\n"
+                            f"• <b>Execution Model:</b> Hold 100% position to 1:4 TP with CTC protection at +{self.ctc_trigger_rr:.1f}R\n"
                             f"• <b>Contracts:</b> {num_contracts} Contracts ({btc_size:.4f} BTC, ${actual_notional:.2f}){order_id_line}\n"
                             f"• <b>Risk at SL:</b> ${risk_usd:.2f} ({risk_pct:.1f}%)\n"
                             f"• <b>Reward at TP:</b> +${reward_usd:.2f} (+{reward_pct:.1f}%)\n"
@@ -964,15 +1007,17 @@ class LiveICTPaperBot:
                         bal_display = self.balance_desc if (self.trading_mode == "REAL" and self.balance_desc) else f"${self.capital:,.2f}"
                         reward_usd = risk_usd * self.min_rr
                         reward_pct = risk_pct * self.min_rr
+                        ctc_trigger_p = entry_price - (self.ctc_trigger_rr * risk_dist)
                         entry_alert = (
                             f"🚀 <b>ICT BOT: NEW ORDER EXECUTED ({mode_badge})</b>\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
                             f"• <b>Trade #{self.active_trade['id']}</b> | <b>Side:</b> SHORT 🔴\n"
                             f"• <b>Setup Model:</b> {f['type']} (MSS Confirmed)\n"
                             f"• <b>Entry Price:</b> ${entry_price:,.1f}\n"
-                            f"• <b>Stop Loss (-1.0R):</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
+                            f"• <b>Initial Stop Loss (-1.0R):</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
+                            f"• <b>CTC Protection (+{self.ctc_trigger_rr:.1f}R):</b> ${ctc_trigger_p:,.1f} (SL moves to Cost)\n"
                             f"• <b>Take Profit (+4.0R / 1:4 RR):</b> ${tp_price:,.1f} ({risk_dist * self.min_rr:.1f} pts)\n"
-                            f"• <b>Execution Model:</b> Pure Binary (Either Full TP or Full SL)\n"
+                            f"• <b>Execution Model:</b> Hold 100% position to 1:4 TP with CTC protection at +{self.ctc_trigger_rr:.1f}R\n"
                             f"• <b>Contracts:</b> {num_contracts} Contracts ({btc_size:.4f} BTC, ${actual_notional:.2f}){order_id_line}\n"
                             f"• <b>Risk at SL:</b> ${risk_usd:.2f} ({risk_pct:.1f}%)\n"
                             f"• <b>Reward at TP:</b> +${reward_usd:.2f} (+{reward_pct:.1f}%)\n"
@@ -999,7 +1044,7 @@ def run_live_loop():
     print(f"Max Leverage Cap:            {bot.max_leverage:.0f}x")
     print(f"Risk Per Trade:              {bot.risk_per_trade*100:.1f}% (${bot.capital * bot.risk_per_trade:,.2f})")
     print(f"Daily Loss Limit:            {bot.daily_loss_limit*100:.1f}% (${bot.capital * bot.daily_loss_limit:,.2f})")
-    print(f"Targets & RR:                Pure Binary 1:4 RR (Either Full TP +4.0R or Full SL -1.0R)")
+    print(f"Targets & RR:                Move SL to CTC at +{bot.ctc_trigger_rr:.1f}R | Full 1:4 RR Target")
     print(f"Max Trades Per Day:          {bot.max_trades_daily} Trades")
     print(f"Telegram Alerts:             {'CONNECTED & ACTIVE' if TELEGRAM_BOT_TOKEN else 'OFFLINE (Token needed in .env)'}")
     print("="*65 + "\n")
@@ -1052,7 +1097,7 @@ def run_live_loop():
                     "• <b>Status:</b> Scanning live 15m candles for ICT setups.\n"
                     f"• <b>Capital:</b> {bal_display}\n"
                     "• <b>Active Hours:</b> 8:00 PM to 11:55 PM IST (US Session)\n"
-                    "• <b>Target & Exit Model:</b> Pure Binary 1:4 RR (Either Full TP +4.0R or Full SL -1.0R)"
+                    f"• <b>Target & Exit Model:</b> Move SL to CTC at +{bot.ctc_trigger_rr:.1f}R | Full 1:4 RR Target"
                 )
                 send_telegram_alert(open_msg)
             elif not is_active:
