@@ -777,6 +777,13 @@ class LiveICTPaperBot:
                         
                         risk_pts = max(risk_dist, 20.0)
                         risk_usd = num_contracts * (risk_pts * 0.001)
+                        
+                        # Enforce strict 10% maximum risk cap per trade
+                        max_risk_usd = self.capital * self.risk_per_trade
+                        if risk_usd > max_risk_usd:
+                            num_contracts = max(1, int(max_risk_usd / (risk_pts * 0.001)))
+                            risk_usd = num_contracts * (risk_pts * 0.001)
+                        
                         risk_pct = (risk_usd / self.capital * 100.0) if self.capital > 0 else 0.0
                         
                         btc_size = num_contracts * 0.001
@@ -923,6 +930,13 @@ class LiveICTPaperBot:
                         
                         risk_pts = max(risk_dist, 20.0)
                         risk_usd = num_contracts * (risk_pts * 0.001)
+                        
+                        # Enforce strict 10% maximum risk cap per trade
+                        max_risk_usd = self.capital * self.risk_per_trade
+                        if risk_usd > max_risk_usd:
+                            num_contracts = max(1, int(max_risk_usd / (risk_pts * 0.001)))
+                            risk_usd = num_contracts * (risk_pts * 0.001)
+                        
                         risk_pct = (risk_usd / self.capital * 100.0) if self.capital > 0 else 0.0
                         
                         btc_size = num_contracts * 0.001
