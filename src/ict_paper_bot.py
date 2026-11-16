@@ -208,10 +208,6 @@ class LiveICTPaperBot:
             self.capital = initial_capital
             self.balance_desc = f"${initial_capital:,.2f}"
             
-        self.min_rr = min_rr
-        self.partial_tp_rr = partial_tp_rr
-        self.partial_tp_pct = partial_tp_pct
-        
         self.active_trade = None
         self.daily_stats = {}
         self.completed_trades = []
@@ -306,7 +302,7 @@ class LiveICTPaperBot:
             f"• <b>Risk Per Trade:</b> {self.risk_per_trade*100:.1f}%\n"
             f"• <b>Margin Allocation Cap:</b> {self.max_margin_pct*100:.0f}% ({100 - self.max_margin_pct*100:.0f}% free cushion)\n"
             f"• <b>Daily Loss Circuit Breaker:</b> {self.daily_loss_limit*100:.1f}%\n"
-            f"• <b>Targets:</b> 1:2 RR (50% Banked + SL to CTC) & 1:4 RR Complete TP\n"
+            f"• <b>Target & Exit Model:</b> Pure Binary 1:4 RR (Either Full TP +4.0R or Full SL -1.0R)\n"
             f"• <b>Strategy:</b> Model 1 (FVG) & Model 2 (iFVG) with MSS\n"
             f"• <i>Connected to Delta Exchange India! Real-time alerts will stream here.</i>"
         )
@@ -343,7 +339,7 @@ class LiveICTPaperBot:
                 f"<b>{t['side']} #{t['id']}</b> ({t['model']})\n"
                 f"   • Entry: ${t['entry']:,.1f} | Current: ${current_price:,.1f}\n"
                 f"   • Live Float PnL: {pnl_sign}${abs(unrealized_pnl):.2f}\n"
-                f"   • TP1: ${t['tp1']:,.1f} | TP2: ${t['tp2']:,.1f} | SL: ${t['sl']:,.1f}"
+                f"   • TP: ${t.get('tp', t.get('tp2', 0)):,.1f} (1:4 RR) | SL: ${t['sl']:,.1f}"
             )
             
         pnl_day_sign = "+" if day_stats["pnl_usd"] >= 0 else "-"
@@ -496,101 +492,26 @@ class LiveICTPaperBot:
             exit_reason = ""
             
             if is_long:
-                # Stop Loss check
+                # Stop Loss check (-1.0R)
                 if current_price <= t["sl"]:
                     exit_price = t["sl"]
-                    if t["be_activated"]:
-                        exit_reason = "CTC SL Hit (50% Profit Banked at 1:2 RR)"
-                    else:
-                        exit_reason = "Initial SL Hit (-1.0R)"
+                    exit_reason = "Stop Loss Hit (-1.0R)"
                     trade_closed = True
-                # TP1 Check (1:2 RR)
-                elif not t["tp1_hit"] and current_price >= t["tp1"]:
-                    t["tp1_hit"] = True
-                    partial_gain = (t["size"] * self.partial_tp_pct) * (t["tp1"] - t["entry"])
-                    self.capital += partial_gain
-                    t["realized_pnl"] += partial_gain
-                    t["size"] *= (1.0 - self.partial_tp_pct)
-                    t["sl"] = t["entry"] # Move to CTC / Breakeven
-                    t["be_activated"] = True
-                    
-                    # Close 50% contracts on Delta Exchange India if real trading
-                    if self.trading_mode == "REAL" and self.delta_client:
-                        try:
-                            c_to_close = max(1, t.get("contracts", 1) // 2) if t.get("contracts", 1) >= 2 else 0
-                            if c_to_close > 0:
-                                self.delta_client.close_position(product_id=27, size_contracts=c_to_close, side_to_close="buy")
-                                t["contracts"] -= c_to_close
-                                print(f"[REAL ORDER CLOSED] TP1 closed {c_to_close} contracts. Remaining: {t['contracts']}", flush=True)
-                        except Exception as e:
-                            print(f"[REAL ORDER ERROR] Error closing TP1 on Delta: {e}", flush=True)
-                            
-                    self.save_state()
-                    
-                    alert_msg = (
-                        f"🎯 <b>ICT BOT: TARGET 1 HIT (+{self.partial_tp_rr:.1f}R / 1:2 RR)</b>\n"
-                        f"━━━━━━━━━━━━━━━━━━━\n"
-                        f"• <b>Symbol:</b> BTCUSD (Delta Exchange India)\n"
-                        f"• <b>Side:</b> LONG 🟢\n"
-                        f"• <b>Target 1:</b> ${t['tp1']:,.1f}\n"
-                        f"• <b>Banked Profit:</b> +${partial_gain:.2f}\n"
-                        f"• <b>SL Status:</b> MOVED TO CTC (Cost to Cost / Breakeven at ${t['entry']:,.1f}) 🛡️\n"
-                        f"• <b>Account Balance:</b> ${self.capital:,.2f}\n"
-                        f"• <i>Remaining 50% running risk-free to Complete TP (+{self.min_rr:.1f}R / 1:4 RR: ${t['tp2']:,.1f})!</i>"
-                    )
-                    send_telegram_alert(alert_msg)
-                    print(f"\n[ALERT] TP1 Hit on Trade #{t['id']}! Banked +${partial_gain:.2f}. Stop Loss moved to CTC.\n")
-                # TP2 Check (1:4 RR / Complete TP)
-                elif t["tp1_hit"] and current_price >= t["tp2"]:
-                    exit_price = t["tp2"]
-                    exit_reason = f"Complete Target TP2 Hit (+{self.min_rr:.1f}R / 1:4 RR)"
+                # Take Profit Check (+4.0R / 1:4 RR)
+                elif current_price >= t.get("tp", t.get("tp2", 0)):
+                    exit_price = t.get("tp", t.get("tp2", 0))
+                    exit_reason = f"Take Profit Hit (+{self.min_rr:.1f}R / 1:4 RR)"
                     trade_closed = True
             else: # SHORT
+                # Stop Loss check (-1.0R)
                 if current_price >= t["sl"]:
                     exit_price = t["sl"]
-                    if t["be_activated"]:
-                        exit_reason = "CTC SL Hit (50% Profit Banked at 1:2 RR)"
-                    else:
-                        exit_reason = "Initial SL Hit (-1.0R)"
+                    exit_reason = "Stop Loss Hit (-1.0R)"
                     trade_closed = True
-                elif not t["tp1_hit"] and current_price <= t["tp1"]:
-                    t["tp1_hit"] = True
-                    partial_gain = (t["size"] * self.partial_tp_pct) * (t["entry"] - t["tp1"])
-                    self.capital += partial_gain
-                    t["realized_pnl"] += partial_gain
-                    t["size"] *= (1.0 - self.partial_tp_pct)
-                    t["sl"] = t["entry"]
-                    t["be_activated"] = True
-                    
-                    # Close 50% contracts on Delta Exchange India if real trading
-                    if self.trading_mode == "REAL" and self.delta_client:
-                        try:
-                            c_to_close = max(1, t.get("contracts", 1) // 2) if t.get("contracts", 1) >= 2 else 0
-                            if c_to_close > 0:
-                                self.delta_client.close_position(product_id=27, size_contracts=c_to_close, side_to_close="sell")
-                                t["contracts"] -= c_to_close
-                                print(f"[REAL ORDER CLOSED] TP1 closed {c_to_close} contracts. Remaining: {t['contracts']}", flush=True)
-                        except Exception as e:
-                            print(f"[REAL ORDER ERROR] Error closing TP1 on Delta: {e}", flush=True)
-                            
-                    self.save_state()
-                    
-                    alert_msg = (
-                        f"🎯 <b>ICT BOT: TARGET 1 HIT (+{self.partial_tp_rr:.1f}R / 1:2 RR)</b>\n"
-                        f"━━━━━━━━━━━━━━━━━━━\n"
-                        f"• <b>Symbol:</b> BTCUSD (Delta Exchange India)\n"
-                        f"• <b>Side:</b> SHORT 🔴\n"
-                        f"• <b>Target 1:</b> ${t['tp1']:,.1f}\n"
-                        f"• <b>Banked Profit:</b> +${partial_gain:.2f}\n"
-                        f"• <b>SL Status:</b> MOVED TO CTC (Cost to Cost / Breakeven at ${t['entry']:,.1f}) 🛡️\n"
-                        f"• <b>Account Balance:</b> ${self.capital:,.2f}\n"
-                        f"• <i>Remaining 50% running risk-free to Complete TP (+{self.min_rr:.1f}R / 1:4 RR: ${t['tp2']:,.1f})!</i>"
-                    )
-                    send_telegram_alert(alert_msg)
-                    print(f"\n[ALERT] TP1 Hit on Trade #{t['id']}! Banked +${partial_gain:.2f}. Stop Loss moved to CTC.\n")
-                elif t["tp1_hit"] and current_price <= t["tp2"]:
-                    exit_price = t["tp2"]
-                    exit_reason = f"Complete Target TP2 Hit (+{self.min_rr:.1f}R / 1:4 RR)"
+                # Take Profit Check (+4.0R / 1:4 RR)
+                elif current_price <= t.get("tp", t.get("tp2", 0)):
+                    exit_price = t.get("tp", t.get("tp2", 0))
+                    exit_reason = f"Take Profit Hit (+{self.min_rr:.1f}R / 1:4 RR)"
                     trade_closed = True
 
             if trade_closed:
@@ -661,7 +582,7 @@ class LiveICTPaperBot:
         # ---------------------------------------------------------------------
         # 2. CHECK CANDLE FORMATION & SCAN FOR NEW SETUPS
         # ---------------------------------------------------------------------
-        # Only scan for entries during 4:30 PM - 9:00 AM IST (Overnight)
+        # Only scan for entries during 8:00 PM - 11:55 PM IST (US Session)
         if not self.is_in_session(now_ist):
             return
             
@@ -755,8 +676,9 @@ class LiveICTPaperBot:
                     risk_dist = entry_price - sl_price
                     
                     if risk_dist >= 60.0 and (risk_dist / entry_price) < 0.02:
-                        tp1_price = entry_price + (self.partial_tp_rr * risk_dist)
-                        tp2_price = entry_price + (self.min_rr * risk_dist)
+                        tp_price = entry_price + (self.min_rr * risk_dist)
+                        tp1_price = tp_price
+                        tp2_price = tp_price
                         
                         # Contract sizing: Use 80% of total amount in trade, reserving ~20% for fees & cushion
                         contract_val_usd = entry_price * 0.001
@@ -775,7 +697,7 @@ class LiveICTPaperBot:
                         risk_pts = max(risk_dist, 20.0)
                         risk_usd = num_contracts * (risk_pts * 0.001)
                         
-                        # Enforce strict 10% maximum risk cap per trade
+                        # Enforce strict 15% maximum risk cap per trade
                         max_risk_usd = self.capital * self.risk_per_trade
                         if risk_usd > max_risk_usd:
                             num_contracts = max(1, int(max_risk_usd / (risk_pts * 0.001)))
@@ -861,8 +783,9 @@ class LiveICTPaperBot:
                             "entry_time": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
                             "entry": entry_price,
                             "sl": sl_price,
-                            "tp1": tp1_price,
-                            "tp2": tp2_price,
+                            "tp": tp_price,
+                            "tp1": tp_price,
+                            "tp2": tp_price,
                             "risk_dist": risk_dist,
                             "size": btc_size,
                             "notional": actual_notional,
@@ -881,21 +804,24 @@ class LiveICTPaperBot:
                         mode_badge = "🔥 REAL MONEY LIVE" if self.trading_mode == "REAL" else "📝 PAPER TRADING"
                         order_id_line = f"\n• <b>Delta Order ID:</b> <code>#{real_order_id} (Verified Live)</code>" if real_order_id else ""
                         bal_display = self.balance_desc if (self.trading_mode == "REAL" and self.balance_desc) else f"${self.capital:,.2f}"
+                        reward_usd = risk_usd * self.min_rr
+                        reward_pct = risk_pct * self.min_rr
                         entry_alert = (
                             f"🚀 <b>ICT BOT: NEW ORDER EXECUTED ({mode_badge})</b>\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
                             f"• <b>Trade #{self.active_trade['id']}</b> | <b>Side:</b> LONG 🟢\n"
                             f"• <b>Setup Model:</b> {f['type']} (MSS Confirmed)\n"
                             f"• <b>Entry Price:</b> ${entry_price:,.1f}\n"
-                            f"• <b>Stop Loss:</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
-                            f"• <b>Target 1 (1:2 RR):</b> ${tp1_price:,.1f} (50% exit + SL to CTC)\n"
-                            f"• <b>Complete Target (1:4 RR):</b> ${tp2_price:,.1f}\n"
+                            f"• <b>Stop Loss (-1.0R):</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
+                            f"• <b>Take Profit (+4.0R / 1:4 RR):</b> ${tp_price:,.1f} ({risk_dist * self.min_rr:.1f} pts)\n"
+                            f"• <b>Execution Model:</b> Pure Binary (Either Full TP or Full SL)\n"
                             f"• <b>Contracts:</b> {num_contracts} Contracts ({btc_size:.4f} BTC, ${actual_notional:.2f}){order_id_line}\n"
                             f"• <b>Risk at SL:</b> ${risk_usd:.2f} ({risk_pct:.1f}%)\n"
+                            f"• <b>Reward at TP:</b> +${reward_usd:.2f} (+{reward_pct:.1f}%)\n"
                             f"• <b>Account Balance:</b> {bal_display}"
                         )
                         send_telegram_alert(entry_alert)
-                        print(f"\n[{self.trading_mode} TRADE ENTERED] LONG #{self.active_trade['id']} ({num_contracts} contracts) at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
+                        print(f"\n[{self.trading_mode} TRADE ENTERED] LONG #{self.active_trade['id']} ({num_contracts} contracts) at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP: ${tp_price:,.1f} (1:4 RR)\n")
                         break
 
             # Model 1 & 2: Bearish Setup (FVG or iFVG)
@@ -908,8 +834,9 @@ class LiveICTPaperBot:
                     risk_dist = sl_price - entry_price
                     
                     if risk_dist >= 60.0 and (risk_dist / entry_price) < 0.02:
-                        tp1_price = entry_price - (self.partial_tp_rr * risk_dist)
-                        tp2_price = entry_price - (self.min_rr * risk_dist)
+                        tp_price = entry_price - (self.min_rr * risk_dist)
+                        tp1_price = tp_price
+                        tp2_price = tp_price
                         
                         # Contract sizing: Use 80% of total amount in trade, reserving ~20% for fees & cushion
                         contract_val_usd = entry_price * 0.001
@@ -928,7 +855,7 @@ class LiveICTPaperBot:
                         risk_pts = max(risk_dist, 20.0)
                         risk_usd = num_contracts * (risk_pts * 0.001)
                         
-                        # Enforce strict 10% maximum risk cap per trade
+                        # Enforce strict 15% maximum risk cap per trade
                         max_risk_usd = self.capital * self.risk_per_trade
                         if risk_usd > max_risk_usd:
                             num_contracts = max(1, int(max_risk_usd / (risk_pts * 0.001)))
@@ -1014,8 +941,9 @@ class LiveICTPaperBot:
                             "entry_time": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
                             "entry": entry_price,
                             "sl": sl_price,
-                            "tp1": tp1_price,
-                            "tp2": tp2_price,
+                            "tp": tp_price,
+                            "tp1": tp_price,
+                            "tp2": tp_price,
                             "risk_dist": risk_dist,
                             "size": btc_size,
                             "notional": actual_notional,
@@ -1034,21 +962,24 @@ class LiveICTPaperBot:
                         mode_badge = "🔥 REAL MONEY LIVE" if self.trading_mode == "REAL" else "📝 PAPER TRADING"
                         order_id_line = f"\n• <b>Delta Order ID:</b> <code>#{real_order_id} (Verified Live)</code>" if real_order_id else ""
                         bal_display = self.balance_desc if (self.trading_mode == "REAL" and self.balance_desc) else f"${self.capital:,.2f}"
+                        reward_usd = risk_usd * self.min_rr
+                        reward_pct = risk_pct * self.min_rr
                         entry_alert = (
                             f"🚀 <b>ICT BOT: NEW ORDER EXECUTED ({mode_badge})</b>\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
                             f"• <b>Trade #{self.active_trade['id']}</b> | <b>Side:</b> SHORT 🔴\n"
                             f"• <b>Setup Model:</b> {f['type']} (MSS Confirmed)\n"
                             f"• <b>Entry Price:</b> ${entry_price:,.1f}\n"
-                            f"• <b>Stop Loss:</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
-                            f"• <b>Target 1 (1:2 RR):</b> ${tp1_price:,.1f} (50% exit + SL to CTC)\n"
-                            f"• <b>Complete Target (1:4 RR):</b> ${tp2_price:,.1f}\n"
+                            f"• <b>Stop Loss (-1.0R):</b> ${sl_price:,.1f} ({risk_dist:.1f} pts)\n"
+                            f"• <b>Take Profit (+4.0R / 1:4 RR):</b> ${tp_price:,.1f} ({risk_dist * self.min_rr:.1f} pts)\n"
+                            f"• <b>Execution Model:</b> Pure Binary (Either Full TP or Full SL)\n"
                             f"• <b>Contracts:</b> {num_contracts} Contracts ({btc_size:.4f} BTC, ${actual_notional:.2f}){order_id_line}\n"
                             f"• <b>Risk at SL:</b> ${risk_usd:.2f} ({risk_pct:.1f}%)\n"
+                            f"• <b>Reward at TP:</b> +${reward_usd:.2f} (+{reward_pct:.1f}%)\n"
                             f"• <b>Account Balance:</b> {bal_display}"
                         )
                         send_telegram_alert(entry_alert)
-                        print(f"\n[{self.trading_mode} TRADE ENTERED] SHORT #{self.active_trade['id']} ({num_contracts} contracts) at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP1: ${tp1_price:,.1f} | TP2: ${tp2_price:,.1f}\n")
+                        print(f"\n[{self.trading_mode} TRADE ENTERED] SHORT #{self.active_trade['id']} ({num_contracts} contracts) at ${entry_price:,.1f} | SL: ${sl_price:,.1f} | TP: ${tp_price:,.1f} (1:4 RR)\n")
                         break
 
 # -----------------------------------------------------------------------------
@@ -1068,7 +999,7 @@ def run_live_loop():
     print(f"Max Leverage Cap:            {bot.max_leverage:.0f}x")
     print(f"Risk Per Trade:              {bot.risk_per_trade*100:.1f}% (${bot.capital * bot.risk_per_trade:,.2f})")
     print(f"Daily Loss Limit:            {bot.daily_loss_limit*100:.1f}% (${bot.capital * bot.daily_loss_limit:,.2f})")
-    print(f"Targets & RR:                1:2 RR (50% Banked + CTC) | 1:4 RR Complete TP")
+    print(f"Targets & RR:                Pure Binary 1:4 RR (Either Full TP +4.0R or Full SL -1.0R)")
     print(f"Max Trades Per Day:          {bot.max_trades_daily} Trades")
     print(f"Telegram Alerts:             {'CONNECTED & ACTIVE' if TELEGRAM_BOT_TOKEN else 'OFFLINE (Token needed in .env)'}")
     print("="*65 + "\n")
@@ -1121,7 +1052,7 @@ def run_live_loop():
                     "• <b>Status:</b> Scanning live 15m candles for ICT setups.\n"
                     f"• <b>Capital:</b> {bal_display}\n"
                     "• <b>Active Hours:</b> 8:00 PM to 11:55 PM IST (US Session)\n"
-                    "• <b>Targets:</b> 1:2 RR (50% Banked + CTC) & 1:4 RR Complete TP"
+                    "• <b>Target & Exit Model:</b> Pure Binary 1:4 RR (Either Full TP +4.0R or Full SL -1.0R)"
                 )
                 send_telegram_alert(open_msg)
             elif not is_active:
